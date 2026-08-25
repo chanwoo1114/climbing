@@ -1,0 +1,40 @@
+# syntax=docker/dockerfile:1
+# 개발용 이미지. 소스는 볼륨 마운트하고 코드 수정 시 자동 리로드된다.
+# 프로덕션 빌드는 Dockerfile.prod 참고.
+FROM python:3.12-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+# GeoDjango(PostGIS)에 필요한 네이티브 라이브러리
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        binutils \
+        gdal-bin \
+        libgdal-dev \
+        libgeos-dev \
+        libproj-dev \
+        postgresql-client \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ---- web (runserver 자동 리로드) -----------------------------------------
+FROM base AS dev
+COPY requirements/ requirements/
+RUN pip install -r requirements/dev.txt
+COPY . .
+EXPOSE 8000
+CMD ["python", "manage.py", "runserver", "0.0.0.0:8000"]
+
+# ---- celery worker (watchmedo로 파일 변경 시 워커 재시작) -----------------
+FROM base AS worker-dev
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+COPY requirements/ requirements/
+RUN pip install -r requirements/worker.txt -r requirements/dev.txt
+COPY . .
+CMD ["watchmedo", "auto-restart", "--directory=/app", "--pattern=*.py", "--recursive", \
+     "--", "celery", "-A", "config", "worker", "-l", "info"]

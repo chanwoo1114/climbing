@@ -1,0 +1,61 @@
+@import "tailwindcss";
+
+/* 디자인 시스템: Chalk & Terra
+   - 임의 hex 금지. 아래 토큰만 사용한다.
+   - terra-500은 화면당 주요 CTA 1개에만, danger는 삭제/오류 전용.
+   - 난이도 색은 토큰이 아닌 GymDifficulty.color(DB 값)를 렌더링. */
+@theme {
+  /* 배경 / 보더 */
+  --color-chalk-50: #fbfaf8;
+  --color-chalk-100: #f6f3ee;
+  --color-chalk-200: #efeae2;
+  --color-chalk-300: #e2dbd0;
+  --color-chalk-400: #cfc5b6;
+
+  /* 텍스트 (순수 black/gray-900 금지) */
+  --color-ink-300: #a9a196;
+  --color-ink-400: #857c70;
+  --color-ink-500: #5f574c;
+  --color-ink-600: #443d34;
+  --color-ink-700: #2f2a23;
+
+  /* primary CTA */
+  --color-terra-100: #f7e3da;
+  --color-terra-300: #dfa287;
+  --color-terra-500: #c2643f;
+  --color-terra-600: #a5502f;
+
+  /* 서브 포인트 */
+  --color-ochre-100: #faeed2;
+  --color-ochre-400: #d9a441;
+  --color-ochre-500: #bf8b28;
+
+  /* success */
+  --color-moss-100: #e2ebdd;
+  --color-moss-400: #7d9a6b;
+  --color-moss-500: #5f7d4e;
+
+  /* 정보 */
+  --color-slate-100: #e3e7ec;
+  --color-slate-400: #7b8794;
+  --color-slate-500: #5a6673;
+
+  /* 삭제 / 오류 전용 */
+  --color-danger-100: #f8ded9;
+  --color-danger-500: #c04a38;
+  --color-danger-600: #a13a2a;
+
+  --radius-card: 14px;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background-color: var(--color-chalk-100);
+  color: var(--color-ink-600);
+  -webkit-font-smoothing: antialiased;
+}

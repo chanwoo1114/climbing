@@ -1,0 +1,19 @@
+# syntax=docker/dockerfile:1
+# 개발용 — vite dev server(HMR). 소스는 볼륨 마운트한다.
+# 프로덕션 빌드는 Dockerfile.prod 참고.
+FROM node:22-alpine AS dev
+
+WORKDIR /app
+
+# 의존성 레이어 분리 (package.json 변경 시에만 재설치)
+COPY package*.json ./
+RUN npm ci
+
+COPY . .
+
+# 볼륨 마운트 환경에서 파일 변경 감지가 누락되지 않도록 폴링을 켠다.
+ENV CHOKIDAR_USEPOLLING=true \
+    VITE_USE_POLLING=true
+
+EXPOSE 5180
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "5180"]

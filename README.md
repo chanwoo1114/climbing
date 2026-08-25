@@ -53,23 +53,42 @@ climbing/
 │   ├── chat/         # 실시간 채팅
 │   └── analysis/     # AI 영상 자세 분석
 ├── front/            # React SPA
-└── docs/             # 개발정의서, API 명세
+└── docs/             # 개발정의.md (개발 정의서 v3)
 ```
 
 ## 실행 방법
 
 ```bash
-# Backend (web + db + redis + celery)
+# Backend (web + db(postgis) + redis + celery)
 cd backend
-docker compose up -d
+cp .env.example .env          # 포트/시크릿은 여기서 조정
+docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml exec web python manage.py migrate
 
 # Frontend
 cd front
 npm install
-npm run dev   # http://localhost:5173
+npm run dev                   # http://localhost:5180
 ```
 
-API 문서: http://localhost:8000/api/schema/swagger-ui/
+개발 스택은 소스를 볼륨 마운트하므로 코드 수정이 즉시 반영된다
+(Django runserver 자동 리로드 / celery watchmedo 재시작 / vite HMR).
+프로덕션 이미지는 `Dockerfile.prod`에 따로 분리해 뒀다.
+
+### 포트
+
+| 대상 | 호스트 포트 | 컨테이너 | 설정 위치 |
+|---|---|---|---|
+| Django API | **8010** | 8000 | `backend/.env` → `WEB_PORT` |
+| PostgreSQL (PostGIS) | **5442** | 5432 | `backend/.env` → `DB_PORT` |
+| Redis | **6389** | 6379 | `backend/.env` → `REDIS_PORT` |
+| Vite dev server | **5180** | 5180 | `front/.env`(FRONT_PORT), `front/vite.config.ts` |
+
+백엔드와 프론트는 서로 다른 포트다. 브라우저는 프론트(5180)와만 통신하고 `/api`·`/ws`는 vite가 백엔드로 프록시하므로, 외부 공개 시 포트포워딩은 5180 하나만 열면 된다.
+
+Vite dev 서버는 `/api`, `/ws` 요청을 `localhost:8010`으로 프록시한다.
+
+API 문서: http://localhost:8010/api/schema/swagger-ui/
 
 ## 개발 문서
 

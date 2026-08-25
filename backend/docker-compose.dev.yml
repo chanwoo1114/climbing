@@ -1,0 +1,112 @@
+name: climbing-test
+
+# 개발용 스택. 소스를 볼륨 마운트해서 코드 수정이 즉시 반영된다.
+#   docker compose -f docker-compose.dev.yml up -d
+services:
+  db:
+    image: postgis/postgis:16-3.4
+    container_name: climbing-test-db
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-climbing}
+      POSTGRES_USER: ${POSTGRES_USER:-climbing}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-climbing}
+    ports:
+      - "${DB_PORT:-5442}:5432"
+    volumes:
+      - climbing_test_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-climbing} -d ${POSTGRES_DB:-climbing}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: climbing-test-redis
+    ports:
+      - "${REDIS_PORT:-6389}:6379"
+    volumes:
+      - climbing_test_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: dev
+    image: climbing-test-web
+    container_name: climbing-test-web
+    command: python manage.py runserver 0.0.0.0:8000
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    ports:
+      - "${WEB_PORT:-8010}:8000"
+    volumes:
+      # 소스 전체를 마운트 — .py 저장 시 runserver가 자동 리로드한다.
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  celery:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: worker-dev
+    image: climbing-test-celery
+    container_name: climbing-test-celery
+    # watchmedo가 .py 변경을 감지해 워커를 재시작한다.
+    command: >
+      watchmedo auto-restart --directory=/app --pattern=*.py --recursive
+      -- celery -A config worker -l info --concurrency=2
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: dev
+    image: climbing-test-web
+    container_name: climbing-test-celery-beat
+    command: >
+      watchmedo auto-restart --directory=/app --pattern=*.py --recursive
+      -- celery -A config beat -l info
+    env_file: .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://redis:6379/0
+    volumes:
+      - .:/app
+    depends_on:
+      - redis
+    # 알림 스케줄(M8) 쓸 때만:
+    #   docker compose -f docker-compose.dev.yml --profile beat up -d
+    profiles: ["beat"]
+
+volumes:
+  climbing_test_pgdata:
+  climbing_test_redisdata:

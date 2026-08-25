@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Climbing ERD</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+  :root {
+    --bg: #f6f3ee;          /* chalk-100 */
+    --card: #ffffff;
+    --border: #e2dbd0;      /* chalk-300 */
+    --border-soft: #efeae2; /* chalk-200 */
+    --ink: #2f2a23;         /* ink-700 */
+    --ink-mid: #5f574c;     /* ink-500 */
+    --ink-soft: #857c70;    /* ink-400 */
+    --accent: #c2643f;      /* terra-500 */
+    --done: #5f7d4e;        /* moss-500 */
+    --done-bg: #e2ebdd;     /* moss-100 */
+    --plan: #5a6673;        /* slate-500 */
+    --plan-bg: #e3e7ec;     /* slate-100 */
+    --code-bg: #f1ede6;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #211d18;
+      --card: #2b261f;
+      --border: #443d34;
+      --border-soft: #383228;
+      --ink: #efe9df;
+      --ink-mid: #c8bfb2;
+      --ink-soft: #9a9082;
+      --accent: #df9070;
+      --done: #9ab884;
+      --done-bg: #37412f;
+      --plan: #9fb0c0;
+      --plan-bg: #333b44;
+      --code-bg: #352f27;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #211d18;
+    --card: #2b261f;
+    --border: #443d34;
+    --border-soft: #383228;
+    --ink: #efe9df;
+    --ink-mid: #c8bfb2;
+    --ink-soft: #9a9082;
+    --accent: #df9070;
+    --done: #9ab884;
+    --done-bg: #37412f;
+    --plan: #9fb0c0;
+    --plan-bg: #333b44;
+    --code-bg: #352f27;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--ink);
+    font-family: "IBM Plex Sans KR", "Apple SD Gothic Neo", sans-serif;
+    line-height: 1.6;
+    margin: 0;
+    padding: 40px 20px 80px;
+  }
+  main { max-width: 980px; margin: 0 auto; }
+
+  .eyebrow {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 12px;
+    letter-spacing: .14em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 6px;
+  }
+  h1 {
+    font-size: 30px;
+    font-weight: 700;
+    margin: 0 0 8px;
+    text-wrap: balance;
+  }
+  .sub { color: var(--ink-mid); margin: 0 0 28px; max-width: 62ch; }
+
+  h2 {
+    font-size: 19px;
+    font-weight: 700;
+    margin: 44px 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  h2 .pill {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: .06em;
+    padding: 2px 10px;
+    border-radius: 999px;
+  }
+  .pill.done { background: var(--done-bg); color: var(--done); }
+  .pill.plan { background: var(--plan-bg); color: var(--plan); }
+  .h2-note { color: var(--ink-soft); font-size: 14px; margin: 0 0 14px; }
+
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+    overflow-x: auto;
+  }
+  .mermaid { display: flex; justify-content: center; min-width: 640px; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+  th {
+    text-align: left;
+    font-size: 12px;
+    letter-spacing: .08em;
+    text-transform: uppercase;
+    color: var(--ink-soft);
+    font-weight: 500;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border);
+    white-space: nowrap;
+  }
+  td {
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-soft);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  td.mono, code {
+    font-family: "JetBrains Mono", monospace;
+    font-size: 13px;
+  }
+  code {
+    background: var(--code-bg);
+    padding: 1px 6px;
+    border-radius: 6px;
+    white-space: nowrap;
+  }
+  td.rows { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+  .note {
+    border-left: 3px solid var(--accent);
+    background: var(--card);
+    border-radius: 0 12px 12px 0;
+    padding: 12px 16px;
+    margin: 20px 0 0;
+    font-size: 14px;
+    color: var(--ink-mid);
+  }
+  .note strong { color: var(--ink); }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 18px;
+    margin: 14px 0 0;
+    font-size: 13px;
+    color: var(--ink-mid);
+  }
+  .legend code { font-size: 12px; }
+</style>
+
+<main>
+  <p class="eyebrow">Climbing · PostgreSQL 16 + PostGIS</p>
+  <h1>데이터베이스 ERD</h1>
+  <p class="sub">
+    2026-08-25 기준 실제 스키마. 모든 테이블은 <code>BaseModel</code>을 상속해
+    감사 컬럼 4종(<code>created_at</code> · <code>updated_at</code> · <code>is_deleted</code> · <code>deleted_at</code>)이
+    맨 뒤에 붙는다 — 다이어그램에서는 <code>timestamptz audit</code> 한 줄로 줄여 표기.
+  </p>
+
+  <h2>전체 스키마 <span class="pill done">테이블 20개 · FK 19개</span></h2>
+  <p class="h2-note">DB(public)에 실존하는 모든 테이블 — 색 구분 없이 한 장. 감사 컬럼 4종은 <code>audit</code> 한 줄로 축약</p>
+  <div class="card">
+    <pre class="mermaid">
+erDiagram
+    accounts_user {
+        bigint id PK
+        varchar254 email UK "로그인 ID"
+        varchar30 nickname UK "표시 이름"
+        varchar128 password "PBKDF2 해시만 저장"
+        boolean is_staff "admin 접근"
+        boolean is_superuser
+        timestamptz last_login
+        timestamptz audit "공통 4종"
+    }
+    accounts_userprofile {
+        bigint id PK
+        bigint user_id FK "1:1 UNIQUE"
+        text bio
+        varchar200 image "S3 URL"
+        bigint home_gym_id FK "홈짐 (null 허용)"
+        timestamptz audit "공통 4종"
+    }
+    gyms_gym {
+        bigint id PK
+        varchar100 name "암장 상호"
+        text description
+        varchar200 address "도로명 주소"
+        geography location "Point WGS84"
+        varchar20 phone
+        varchar200 website "카카오맵 URL"
+        timestamptz audit "공통 4종"
+    }
+    gyms_gymdifficulty {
+        bigint id PK
+        bigint gym_id FK
+        varchar30 name "예: 초록, V3"
+        varchar7 color "hex"
+        smallint order "쉬움 0 → 어려움"
+        timestamptz audit "공통 4종"
+    }
+    gyms_gymprice {
+        bigint id PK
+        bigint gym_id FK
+        varchar50 name "1일권, 월회원권"
+        integer price "원"
+        varchar100 note
+        timestamptz audit "공통 4종"
+    }
+    gyms_gymfacility {
+        bigint id PK
+        bigint gym_id FK
+        varchar50 name "샤워실, 주차장"
+        timestamptz audit "공통 4종"
+    }
+    gyms_gymimage {
+        bigint id PK
+        bigint gym_id FK
+        varchar200 image "S3 URL"
+        smallint order
+        timestamptz audit "공통 4종"
+    }
+    gyms_gymreview {
+        bigint id PK
+        bigint gym_id FK
+        bigint user_id FK
+        smallint rating "1~5"
+        text content
+        timestamptz audit "공통 4종"
+    }
+    auth_group {
+        bigint id PK
+        varchar150 name UK
+    }
+    auth_permission {
+        bigint id PK
+        varchar255 name "Can change gym 등"
+        bigint content_type_id FK
+        varchar100 codename
+    }
+    accounts_user_groups {
+        bigint id PK
+        bigint user_id FK
+        bigint group_id FK
+    }
+    accounts_user_user_permissions {
+        bigint id PK
+        bigint user_id FK
+        bigint permission_id FK
+    }
+    auth_group_permissions {
+        bigint id PK
+        bigint group_id FK
+        bigint permission_id FK
+    }
+    django_content_type {
+        bigint id PK
+        varchar100 app_label "예: gyms"
+        varchar100 model "예: gym"
+    }
+    django_admin_log {
+        bigint id PK
+        bigint user_id FK
+        bigint content_type_id FK
+        smallint action_flag "추가·수정·삭제"
+        text change_message
+    }
+    token_blacklist_outstandingtoken {
+        bigint id PK
+        bigint user_id FK
+        varchar255 jti UK "토큰 고유 ID"
+        text token
+        timestamptz expires_at
+    }
+    token_blacklist_blacklistedtoken {
+        bigint id PK
+        bigint token_id FK "1:1"
+        timestamptz blacklisted_at
+    }
+    django_session {
+        varchar40 session_key PK "admin 세션"
+        text session_data
+        timestamptz expire_date
+    }
+    django_migrations {
+        bigint id PK
+        varchar255 app
+        varchar255 name
+        timestamptz applied
+    }
+    spatial_ref_sys {
+        integer srid PK "PostGIS 좌표계"
+        varchar2048 proj4text
+    }
+
+    accounts_user ||--|| accounts_userprofile : "profile"
+    gyms_gym ||--o{ accounts_userprofile : "home_gym"
+    gyms_gym ||--o{ gyms_gymdifficulty : "difficulties"
+    gyms_gym ||--o{ gyms_gymprice : "prices"
+    gyms_gym ||--o{ gyms_gymfacility : "facilities"
+    gyms_gym ||--o{ gyms_gymimage : "images"
+    gyms_gym ||--o{ gyms_gymreview : "reviews"
+    accounts_user ||--o{ gyms_gymreview : "작성"
+    accounts_user ||--o{ accounts_user_groups : ""
+    auth_group ||--o{ accounts_user_groups : ""
+    accounts_user ||--o{ accounts_user_user_permissions : ""
+    auth_permission ||--o{ accounts_user_user_permissions : ""
+    auth_group ||--o{ auth_group_permissions : ""
+    auth_permission ||--o{ auth_group_permissions : ""
+    django_content_type ||--o{ auth_permission : "모델별 4종"
+    accounts_user ||--o{ django_admin_log : ""
+    django_content_type ||--o{ django_admin_log : ""
+    accounts_user ||--o{ token_blacklist_outstandingtoken : "refresh 발급"
+    token_blacklist_outstandingtoken ||--o| token_blacklist_blacklistedtoken : "무효화"
+    </pre>
+    <div class="legend">
+      <span><code>||--||</code> 1 : 1</span>
+      <span><code>||--o{</code> 1 : N</span>
+      <span><code>||--o|</code> 1 : 0..1</span>
+      <span><code>UK</code> UNIQUE</span>
+      <span>django_session · django_migrations · spatial_ref_sys 는 FK 없는 독립 테이블</span>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>UNIQUE와 soft delete.</strong> <code>email</code>·<code>nickname</code>의 UNIQUE는
+    <code>is_deleted</code>를 구분하지 않는다 → 탈퇴 계정의 값도 재사용 불가 (중복 검사는 <code>all_objects</code> 기준).
+    반면 <code>gyms_gymdifficulty</code>의 <code>(gym, name)</code> UNIQUE는
+    <code>is_deleted=False</code> 조건부라 삭제 후 같은 이름 재생성이 가능하다.
+  </div>
+
+  <h2>예정 스키마 <span class="pill plan">M2 – M7 · 미구현</span></h2>
+  <p class="h2-note">docs/개발정의.md 설계 기준 — 구현하며 세부는 달라질 수 있음</p>
+  <div class="card">
+    <pre class="mermaid">
+erDiagram
+    ClimbLog {
+        bigint gym_id FK
+        bigint user_id FK
+        bigint difficulty_id FK "GymDifficulty 참조"
+        boolean is_success
+        varchar video_url "S3"
+        boolean is_shared "피드·크루 공개"
+    }
+    LogLike {
+        bigint log_id FK
+        bigint user_id FK
+    }
+    LogComment {
+        bigint log_id FK
+        bigint user_id FK
+        text content
+    }
+    Follow {
+        bigint follower_id FK
+        bigint following_id FK
+    }
+    Post {
+        bigint user_id FK
+        varchar category "free | recruit"
+        varchar title
+        text content
+    }
+    Recruitment {
+        bigint post_id FK "1:1"
+        bigint gym_id FK
+        bigint crew_id FK "null이면 개인 모집"
+        bigint chat_room_id FK "마감 시 생성"
+        timestamptz meet_at
+        smallint capacity
+        varchar status "open | closed | canceled"
+    }
+    Participation {
+        bigint recruitment_id FK
+        bigint user_id FK
+        varchar status "pending | approved ..."
+    }
+    Crew {
+        bigint owner_id FK
+        bigint home_gym_id FK
+        bigint chat_room_id FK "생성 시 단톡방"
+        varchar join_type "instant | approval"
+    }
+    CrewMember {
+        bigint crew_id FK
+        bigint user_id FK
+        varchar role "owner | staff | member"
+    }
+    ChatRoom {
+        boolean is_group "DM 또는 그룹"
+    }
+    ChatRoomMember {
+        bigint room_id FK
+        bigint user_id FK
+    }
+    Message {
+        bigint room_id FK
+        bigint sender_id FK
+        text content
+    }
+    VideoAnalysis {
+        bigint climb_log_id FK "1:1"
+        varchar status "pending | done | failed"
+        jsonb keypoints "프레임별 33 랜드마크"
+        jsonb metrics "무게중심 궤적 등"
+    }
+
+    ClimbLog ||--o{ LogLike : ""
+    ClimbLog ||--o{ LogComment : ""
+    ClimbLog ||--o| VideoAnalysis : "분석"
+    Post ||--o| Recruitment : "모집글"
+    Recruitment ||--o{ Participation : ""
+    Recruitment }o--|| ChatRoom : "마감 → 생성"
+    Crew ||--o{ CrewMember : ""
+    Crew ||--|| ChatRoom : "단톡방"
+    ChatRoom ||--o{ ChatRoomMember : ""
+    ChatRoom ||--o{ Message : ""
+    Follow }o--|| accounts_user : "follower · following"
+    accounts_user ||--o{ ClimbLog : "기록"
+    </pre>
+  </div>
+
+  <div class="note">
+    <strong>설계 원칙 요약.</strong> 난이도는 자유 문자열 금지 → <code>GymDifficulty</code> FK ·
+    위치는 PostGIS <code>Point</code> (lat/lng Float 금지) · 삭제는 <code>is_deleted</code> soft delete 통일 ·
+    모집 마감→채팅방 생성 같은 다중 모델 변경은 <code>transaction.atomic</code> 서비스 함수로.
+  </div>
+</main>
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+</script>
+</html>

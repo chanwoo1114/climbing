@@ -1,0 +1,8 @@
+-r base.txt
+
+black==24.10.0
+flake8==7.1.1
+isort==5.13.2
+
+# celery 워커 코드 자동 재시작 (watchmedo) — 개발 전용
+watchdog[watchmedo]==6.0.0

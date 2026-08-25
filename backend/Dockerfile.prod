@@ -1,0 +1,39 @@
+# syntax=docker/dockerfile:1
+# 프로덕션 이미지. 소스를 이미지에 굽고 자동 리로드하지 않는다.
+# 개발 중에는 Dockerfile.dev 를 쓴다.
+FROM python:3.12-slim AS base
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        binutils \
+        gdal-bin \
+        libgdal-dev \
+        libgeos-dev \
+        libproj-dev \
+        postgresql-client \
+        curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# ---- web (ASGI — Channels WebSocket 때문에 daphne) ------------------------
+FROM base AS web
+COPY requirements/ requirements/
+RUN pip install -r requirements/base.txt
+COPY . .
+RUN python manage.py collectstatic --noinput || true
+EXPOSE 8000
+CMD ["daphne", "-b", "0.0.0.0", "-p", "8000", "config.asgi:application"]
+
+# ---- celery worker -------------------------------------------------------
+FROM base AS worker
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ffmpeg libgl1 libglib2.0-0 \
+    && rm -rf /var/lib/apt/lists/*
+COPY requirements/ requirements/
+RUN pip install -r requirements/worker.txt
+COPY . .
+CMD ["celery", "-A", "config", "worker", "-l", "info"]

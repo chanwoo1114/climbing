@@ -1,0 +1,25 @@
+# Python / Django
+__pycache__/
+*.py[cod]
+*.sqlite3
+.venv/
+venv/
+staticfiles/
+media/
+
+# Node
+node_modules/
+dist/
+*.local
+*.tsbuildinfo
+
+# 환경변수 (예시 파일만 커밋)
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+.admin-credentials

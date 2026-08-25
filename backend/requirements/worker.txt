@@ -1,0 +1,6 @@
+-r base.txt
+
+# AI 자세 분석 파이프라인 (celery worker 전용 — web 이미지에는 불필요)
+mediapipe==0.10.18
+opencv-python-headless==4.10.0.84
+numpy==1.26.4

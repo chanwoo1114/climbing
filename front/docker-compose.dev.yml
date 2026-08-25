@@ -1,0 +1,35 @@
+name: climbing-test-front
+
+# 프론트는 보통 호스트에서 `npm run dev`로 띄우는 게 빠르다.
+# 컨테이너로 돌릴 때: docker compose -f docker-compose.dev.yml up -d
+services:
+  front:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: dev
+    image: climbing-test-front
+    container_name: climbing-test-front
+    command: npm run dev -- --host 0.0.0.0 --port 5180
+    ports:
+      - "${FRONT_PORT:-5180}:5180"
+    environment:
+      # 브라우저는 상대경로(/api)만 쓰고, vite dev 서버가 이 주소로 프록시한다.
+      # 백엔드 네트워크에 직접 붙어 web 컨테이너(내부 8000)를 가리킨다.
+      VITE_PROXY_TARGET: ${VITE_PROXY_TARGET:-http://web:8000}
+      CHOKIDAR_USEPOLLING: "true"
+      VITE_USE_POLLING: "true"
+    networks:
+      - backend
+    volumes:
+      # 소스 마운트 — 저장 시 HMR로 즉시 반영된다.
+      - .:/app
+      # node_modules는 컨테이너 것을 쓴다 (호스트 것으로 덮이지 않게).
+      - /app/node_modules
+
+# 백엔드 스택(climbing-test)의 네트워크에 합류한다.
+# 따라서 backend를 먼저 띄워야 한다: cd ../backend && dc up -d
+networks:
+  backend:
+    name: climbing-test_default
+    external: true

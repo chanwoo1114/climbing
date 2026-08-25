@@ -8,27 +8,53 @@
 ```
 backend/   Django 5.x + DRF        (accounts, gyms, climbs, social, community, crews, chat, analysis)
 front/     React 19 + TS + Vite    (SPA, React Router v7 라이브러리 모드 — SSR 사용 안 함)
-docs/      개발정의서, API 명세
+docs/      개발정의.md (개발 정의서 v3 — 마일스톤/모델/API 초안)
 ```
+
+공용 코드는 `backend/common/` (BaseModel, 소프트삭제 매니저, 응답 래퍼 렌더러,
+커서 페이지네이션, 예외 핸들러). 도메인 앱은 이걸 상속/재사용한다.
+
+## 포트 (이 머신 기준 — 다른 프로젝트와 충돌 회피용)
+
+| 대상 | 호스트 | 컨테이너 | 설정 위치 |
+|---|---|---|---|
+| Django API | 8010 | 8000 | `backend/.env` → `WEB_PORT` |
+| PostGIS | 5442 | 5432 | `backend/.env` → `DB_PORT` |
+| Redis | 6389 | 6379 | `backend/.env` → `REDIS_PORT` |
+| Vite dev | 5180 | 5180 | `front/.env`(FRONT_PORT), `front/vite.config.ts` |
+
+8000/8001/5173/5432/5433은 다른 프로젝트(lottomap, disaster)가 점유 중이므로 쓰지 말 것.
+외부 공개는 공유기 포트포워딩으로 5180 하나만 연다 —
+브라우저는 항상 vite(5180)와 통신하고 /api·/ws는 vite가 백엔드로 프록시한다.
+front 컨테이너는 백엔드 도커 네트워크(climbing-test_default)에 합류해 web:8000을 직접 바라본다
+(호스트 경유는 방화벽에 막힘). 따라서 backend 스택을 먼저 띄워야 한다.
 
 ## 명령어
 
+개발 스택은 `docker-compose.dev.yml`이라 `-f`가 필요하다. 아래처럼 별칭을 잡으면 편하다.
+
 ```bash
-# Backend
+# Backend (컨테이너 안에서 실행)
 cd backend
-docker compose up -d                          # web + db(postgis) + redis + celery
-python manage.py migrate
-python manage.py test                         # 전체 테스트
-python manage.py test accounts                # 앱 단위 테스트
-python manage.py spectacular --file schema.yml
-black . && flake8                             # 포맷 + 린트
+cp .env.example .env                          # 최초 1회
+alias dc='docker compose -f docker-compose.dev.yml'
+
+dc up -d                                      # web + db(postgis) + redis + celery
+dc exec web python manage.py migrate
+dc exec web python manage.py test             # 전체 테스트
+dc exec web python manage.py test accounts    # 앱 단위 테스트
+dc exec web python manage.py spectacular --file schema.yml
+dc exec web sh -c "black . && flake8"         # 포맷 + 린트
 
 # Frontend
 cd front
-npm run dev          # localhost:5173
+npm run dev          # localhost:5180
 npm run build
-npm run typecheck    # react-router typegen && tsc
+npm run typecheck    # tsc --noEmit
 ```
+
+소스는 볼륨 마운트되어 있어 코드 수정이 즉시 반영된다 (web=runserver 자동 리로드,
+celery=watchmedo 재시작, front=vite HMR). 재빌드가 필요한 건 의존성 변경 시뿐이다.
 
 ## Backend 규칙
 
@@ -77,6 +103,13 @@ npm run typecheck    # react-router typegen && tsc
 - 난이도 색상은 토큰이 아닌 GymDifficulty.color(DB 값)를 렌더링
 - 그라데이션/그림자 최소화, 플랫하게. 모바일 퍼스트, md: 이상에서 데스크톱 확장
 - 다크 모드는 범위 외 (M8 선택)
+
+## Docker 파일 규칙
+
+- 개발용: `Dockerfile.dev` + `docker-compose.dev.yml` — 소스 볼륨 마운트 + 자동 리로드
+- 프로덕션용: `Dockerfile.prod` — 소스를 이미지에 굽고 리로드 없음 (web은 daphne, front는 nginx)
+- 컨테이너·이미지 이름은 `climbing-test-*` (web/db/redis/celery/front)
+- 개발 중 `Dockerfile.prod`는 건드리지 않는다. 의존성 추가 시 두 파일 모두 반영 확인
 
 ## 하지 말 것
 
