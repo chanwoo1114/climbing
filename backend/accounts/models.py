@@ -92,6 +92,10 @@ class User(AbstractUser, BaseModel):
             models.UniqueConstraint(
                 Lower("email"), name="accounts_user_email_lower_uniq"
             ),
+            # 닉네임도 Casey / casey 를 같은 이름으로 본다 (값은 입력한 대로 저장).
+            models.UniqueConstraint(
+                Lower("nickname"), name="accounts_user_nickname_lower_uniq"
+            ),
         ]
 
     def __str__(self):

@@ -53,6 +53,7 @@ cd front
 npm run dev          # localhost:5180
 npm run build
 npm run typecheck    # tsc --noEmit
+npm test             # vitest (lib/validation 등 순수 로직)
 ```
 
 소스는 볼륨 마운트되어 있어 코드 수정이 즉시 반영된다 (web=runserver 자동 리로드,
@@ -88,6 +89,9 @@ celery=watchmedo 재시작, front=vite HMR). 재빌드가 필요한 건 의존�
 ### 테스트
 - 앱별 `tests/` 디렉토리, 파일 단위 분리 (예: `test_jwt_login.py`)
 - 새 API 추가 시 최소 정상 케이스 + 권한 실패 케이스 테스트 작성
+- 입력 규칙(비밀번호·닉네임·이메일)을 바꾸면 `accounts/validators.py`·`serializers.py` 와
+  `front/src/lib/validation.ts` 를 함께 고치고, 양쪽 테스트에 같은 입력값을 추가한다
+  (`accounts/tests/test_password_rules.py` ↔ `front/src/lib/validation.test.ts`)
 
 ## Frontend 규칙
 

@@ -63,6 +63,8 @@ class RegisterSerializer(serializers.ModelSerializer):
             UniqueValidator(
                 queryset=User.all_objects.all(),
                 message="이미 사용 중인 닉네임입니다.",
+                # 표시 이름이라 대소문자는 보존하되, 대소문자만 다른 중복은 막는다.
+                lookup="iexact",
             ),
         ],
         error_messages={
@@ -124,6 +126,8 @@ class MeSerializer(serializers.ModelSerializer):
             UniqueValidator(
                 queryset=User.all_objects.all(),
                 message="이미 사용 중인 닉네임입니다.",
+                # 표시 이름이라 대소문자는 보존하되, 대소문자만 다른 중복은 막는다.
+                lookup="iexact",
             ),
         ],
         error_messages={
