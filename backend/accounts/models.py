@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
+from django.db.models.functions import Lower
 
 from common.managers import SoftDeleteQuerySet
 from common.models import BaseModel
@@ -17,6 +18,23 @@ class UserManager(BaseUserManager.from_queryset(SoftDeleteQuerySet)):
 
     def get_queryset(self):
         return super().get_queryset().filter(is_deleted=False)
+
+    @classmethod
+    def normalize_email(cls, email):
+        """이메일 전체를 소문자로 통일한다.
+
+        Django 기본 normalize_email 은 도메인(@ 뒤)만 소문자화해서
+        Case@test.com 과 case@test.com 이 별개 계정으로 가입된다.
+        로컬파트는 RFC 상 대소문자를 구분하지만 실제 메일 서비스는 구분하지
+        않으므로 로그인 ID 용도로는 전부 소문자로 저장한다.
+        """
+        email = super().normalize_email(email)
+        return email.strip().lower() if email else email
+
+    def get_by_natural_key(self, username):
+        # authenticate() 경유 로그인 조회. 저장은 소문자로 통일되지만,
+        # 정규화 이전에 만들어진 계정도 찾을 수 있게 iexact 로 본다.
+        return self.get(**{f"{self.model.USERNAME_FIELD}__iexact": username})
 
     def _create_user(self, email, password, **extra):
         if not email:
@@ -51,6 +69,13 @@ class User(AbstractUser, BaseModel):
         db_comment="표시 이름 (중복 불가)",
     )
 
+    email_verified_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        verbose_name="이메일 인증 시각",
+        db_comment="인증 메일 링크를 확인한 시각. NULL 이면 미인증 (로그인 불가)",
+    )
+
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["nickname"]
 
@@ -62,6 +87,12 @@ class User(AbstractUser, BaseModel):
         # authenticate() 가 참조하는 _default_manager 를 objects 로 못박는다.
         # (매니저 생성 순서에 따라 all_objects 가 잡히면 탈퇴 계정이 로그인된다.)
         default_manager_name = "objects"
+        constraints = [
+            # 대소문자만 다른 이메일 중복을 DB 에서도 막는다 (동시 가입 경합 대비).
+            models.UniqueConstraint(
+                Lower("email"), name="accounts_user_email_lower_uniq"
+            ),
+        ]
 
     def __str__(self):
         return self.nickname

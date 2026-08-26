@@ -4,6 +4,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from accounts.services import register_user
+from accounts.tests.helpers import create_verified_user
 
 
 class RegisterValidationTests(APITestCase):
@@ -60,7 +61,7 @@ class LoginMessageTests(APITestCase):
 
     @classmethod
     def setUpTestData(cls):
-        register_user(
+        create_verified_user(
             email="login@example.com", nickname="로그인", password="s3cure-pass!"
         )
 
@@ -238,9 +239,7 @@ class PasswordSimilarityTests(APITestCase):
 
     def test_password_same_as_email_rejected(self):
         # 16자 상한 안에서 이메일과 유사한 값 (climber@example = 15자)
-        response = self._register(
-            "climber@example.com", "유사검사", "climber@example"
-        )
+        response = self._register("climber@example.com", "유사검사", "climber@example")
         self.assertEqual(response.status_code, 400)
         self.assertIn("유사", response.json()["error"]["fields"]["password"][0])
 

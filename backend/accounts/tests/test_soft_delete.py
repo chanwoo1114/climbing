@@ -9,6 +9,7 @@ from django.urls import reverse
 from rest_framework.test import APITestCase
 
 from accounts.models import User
+from accounts.tests.helpers import verify
 
 
 class SoftDeletedUserTests(APITestCase):
@@ -72,8 +73,10 @@ class SoftDeletedUserTests(APITestCase):
         )
 
     def test_active_user_unaffected(self):
-        User.objects.create_user(
-            email="alive@example.com", nickname="현역", password="s3cure-pass!"
+        verify(
+            User.objects.create_user(
+                email="alive@example.com", nickname="현역", password="s3cure-pass!"
+            )
         )
         response = self.client.post(
             self.login_url,

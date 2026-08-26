@@ -1,12 +1,12 @@
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
-from accounts.models import User
+from accounts.tests.helpers import create_verified_user
 
 
 class JwtLoginTests(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(
+        self.user = create_verified_user(
             email="login@example.com", nickname="login", password="s3cure-pass!"
         )
 

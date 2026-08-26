@@ -1,0 +1,47 @@
+{% comment %}
+트랜잭션 메일 공통 레이아웃.
+이메일 클라이언트(Gmail/Outlook/네이버)는 <style>·웹폰트·flex 를 대부분 무시하므로
+테이블 + 인라인 스타일만 쓴다. 색은 front/src/index.css 의 Chalk & Hold 토큰과 동일.
+({# #} 한 줄 주석은 여러 줄로 쓰면 본문으로 출력된다 — 반드시 comment 블록 사용)
+{% endcomment %}<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="x-apple-disable-message-reformatting">
+  <title>{{ subject }}</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f3f5f4;">
+  {# 받은편지함 미리보기 줄 — 본문에는 안 보인다 #}
+  <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">{{ preheader }}</div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f3f5f4;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:520px;">
+
+          <tr>
+            <td style="padding:0 4px 14px;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR','Segoe UI',Roboto,sans-serif;font-size:17px;font-weight:700;color:#23272a;">
+              <span style="font-size:20px;">🧗</span>&nbsp;Climbing
+            </td>
+          </tr>
+
+          <tr>
+            <td style="background-color:#ffffff;border:1px solid #dde2df;border-radius:14px;padding:32px 28px;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR','Segoe UI',Roboto,sans-serif;font-size:15px;line-height:24px;color:#363c41;">
+              {% block content %}{% endblock %}
+            </td>
+          </tr>
+
+          <tr>
+            <td style="padding:18px 4px 0;font-family:-apple-system,BlinkMacSystemFont,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR','Segoe UI',Roboto,sans-serif;font-size:12px;line-height:18px;color:#6f777d;">
+              {% block footer %}{% endblock %}
+              <p style="margin:8px 0 0;">이 메일은 발신 전용입니다. 궁금한 점은 앱 안의 문의하기를 이용해 주세요.</p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

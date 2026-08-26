@@ -1,3 +1,4 @@
+import sys
 from datetime import timedelta
 from pathlib import Path
 
@@ -139,6 +140,13 @@ REST_FRAMEWORK = {
     "EXCEPTION_HANDLER": "common.exceptions.envelope_exception_handler",
     "PAGE_SIZE": 20,
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    # 전역 throttle 은 걸지 않는다. accounts/throttles.py 의 클래스를 뷰에 직접 붙인다.
+    "DEFAULT_THROTTLE_RATES": {
+        "login": "5/min",  # 비밀번호 무차별 대입
+        "register": "5/hour",  # 봇 대량 가입
+        "email_send": "5/hour",  # 인증 메일 재전송·재설정 요청
+        "token_confirm": "10/min",  # 토큰 추측
+    },
 }
 
 SIMPLE_JWT = {
@@ -160,8 +168,37 @@ SPECTACULAR_SETTINGS = {
 CORS_ALLOWED_ORIGINS = env("CORS_ALLOWED_ORIGINS")
 CORS_ALLOW_CREDENTIALS = True
 
+# --- 이메일 인증 / 비밀번호 재설정 ----------------------------------------
+# 메일 링크가 가리키는 프론트 주소 (/verify-email, /reset-password 라우트).
+FRONTEND_BASE_URL = env("FRONTEND_BASE_URL", default="http://localhost:5180").rstrip(
+    "/"
+)
+EMAIL_VERIFICATION_TIMEOUT = env.int("EMAIL_VERIFICATION_TIMEOUT", default=60 * 60 * 24)
+PASSWORD_RESET_TIMEOUT = env.int("PASSWORD_RESET_TIMEOUT", default=60 * 60)
+
+# 개발 기본은 콘솔 출력 — 메일 본문이 celery 워커 로그에 찍힌다.
+# 프로덕션은 .env 에서 smtp 백엔드와 호스트 정보를 채운다.
+EMAIL_BACKEND = env(
+    "EMAIL_BACKEND", default="django.core.mail.backends.console.EmailBackend"
+)
+EMAIL_HOST = env("EMAIL_HOST", default="")
+EMAIL_PORT = env.int("EMAIL_PORT", default=587)
+EMAIL_HOST_USER = env("EMAIL_HOST_USER", default="")
+EMAIL_HOST_PASSWORD = env("EMAIL_HOST_PASSWORD", default="")
+EMAIL_USE_TLS = env.bool("EMAIL_USE_TLS", default=True)
+DEFAULT_FROM_EMAIL = env("DEFAULT_FROM_EMAIL", default="Climbing <noreply@localhost>")
+
 # --- Redis / Channels / Celery -------------------------------------------
 REDIS_URL = env("REDIS_URL", default="redis://redis:6379/0")
+
+# throttle 카운터 저장소. 프로세스 메모리(LocMem)면 워커마다 따로 세서 한도가
+# 사실상 N배가 되므로 Redis 로 공유한다. 브로커(db 0)와 DB 번호를 분리.
+CACHES = {
+    "default": {
+        "BACKEND": "django.core.cache.backends.redis.RedisCache",
+        "LOCATION": env("CACHE_URL", default="redis://redis:6379/2"),
+    }
+}
 
 CHANNEL_LAYERS = {
     "default": {
@@ -187,6 +224,14 @@ S3_PRESIGNED_EXPIRE_SECONDS = env.int("S3_PRESIGNED_EXPIRE_SECONDS", default=300
 # --- 영상 분석 제약 (docs/개발정의.md 4장) --------------------------------
 ANALYSIS_MAX_VIDEO_SECONDS = env.int("ANALYSIS_MAX_VIDEO_SECONDS", default=120)
 ANALYSIS_SAMPLE_FPS = env.int("ANALYSIS_SAMPLE_FPS", default=10)
+
+# --- 테스트 전용 오버라이드 --------------------------------------------------
+if "test" in sys.argv:
+    # throttle 카운터가 테스트 간에 누적되지 않게 (throttle 테스트는 LocMem 으로 override).
+    CACHES = {"default": {"BACKEND": "django.core.cache.backends.dummy.DummyCache"}}
+    # 메일 태스크를 큐에 넣지 않고 즉시 실행 → mail.outbox 로 검증.
+    CELERY_TASK_ALWAYS_EAGER = True
+    CELERY_TASK_EAGER_PROPAGATES = True
 
 LOGGING = {
     "version": 1,

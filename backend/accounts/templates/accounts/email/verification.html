@@ -1,0 +1,21 @@
+{% extends "accounts/email/base.html" %}
+
+{% block content %}
+<h1 style="margin:0 0 12px;font-size:22px;line-height:30px;font-weight:700;color:#23272a;">이메일 인증을 완료해 주세요</h1>
+<p style="margin:0 0 8px;">{{ nickname }}님, 반갑습니다.</p>
+<p style="margin:0;">아래 버튼을 누르면 가입이 완료되고 바로 로그인할 수 있어요.</p>
+
+{% include "accounts/email/_button.html" with label="이메일 인증하기" %}
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:24px;">
+  <tr>
+    <td style="background-color:#faeed2;border-radius:12px;padding:12px 14px;font-size:13px;line-height:20px;color:#363c41;">
+      링크는 <strong>{{ hours }}시간</strong> 동안 유효합니다. 만료되면 로그인 화면에서 인증 메일을 다시 받을 수 있어요.
+    </td>
+  </tr>
+</table>
+{% endblock %}
+
+{% block footer %}
+<p style="margin:0;">본인이 가입하지 않았다면 이 메일을 무시하셔도 됩니다. 아무 일도 일어나지 않아요.</p>
+{% endblock %}

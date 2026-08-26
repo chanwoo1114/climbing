@@ -5,6 +5,7 @@ from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
+from accounts.exceptions import EmailNotVerified
 from accounts.models import User
 
 # 입력 규칙 — 프론트(front/src/lib/validation.ts)와 동일하게 유지할 것.
@@ -43,6 +44,8 @@ class RegisterSerializer(serializers.ModelSerializer):
                 # objects 로 검사하면 탈퇴 계정의 이메일이 통과해 500이 난다.
                 queryset=User.all_objects.all(),
                 message="이미 가입된 이메일입니다.",
+                # 대소문자만 다른 이메일도 중복으로 본다 (저장은 소문자로 통일).
+                lookup="iexact",
             )
         ],
         error_messages={
@@ -82,6 +85,10 @@ class RegisterSerializer(serializers.ModelSerializer):
         model = User
         fields = ("id", "email", "nickname", "password")
         read_only_fields = ("id",)
+
+    def validate_email(self, value):
+        # 저장·조회 모두 소문자로 통일한다 (UserManager.normalize_email 과 동일).
+        return User.objects.normalize_email(value)
 
     def validate(self, attrs):
         """비밀번호 검증에 이메일·닉네임을 함께 넘긴다.
@@ -132,8 +139,16 @@ class MeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = User
-        fields = ("id", "email", "nickname", "bio", "image", "created_at")
-        read_only_fields = ("id", "email", "created_at")
+        fields = (
+            "id",
+            "email",
+            "nickname",
+            "bio",
+            "image",
+            "email_verified_at",
+            "created_at",
+        )
+        read_only_fields = ("id", "email", "email_verified_at", "created_at")
 
     def update(self, instance, validated_data):
         profile_data = validated_data.pop("profile", {})
@@ -149,6 +164,38 @@ class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField()
 
 
+class EmailSerializer(serializers.Serializer):
+    """인증 메일 재전송 / 비밀번호 재설정 요청 입력."""
+
+    email = serializers.EmailField(
+        max_length=EMAIL_MAX_LENGTH,
+        error_messages={
+            "invalid": "이메일 형식이 올바르지 않습니다.",
+            "blank": "이메일을 입력해 주세요.",
+        },
+    )
+
+
+class VerifyEmailSerializer(serializers.Serializer):
+    token = serializers.CharField(max_length=512)
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """새 비밀번호 규칙 검증은 user 가 필요해서 services.confirm_password_reset 에서 한다."""
+
+    uid = serializers.CharField(max_length=64)
+    token = serializers.CharField(max_length=128)
+    password = serializers.CharField(
+        write_only=True,
+        max_length=PASSWORD_MAX_LENGTH,
+        style={"input_type": "password"},
+        error_messages={
+            "blank": "비밀번호를 입력해 주세요.",
+            "max_length": f"비밀번호는 {PASSWORD_MAX_LENGTH}자 이하여야 합니다.",
+        },
+    )
+
+
 class LoginSerializer(TokenObtainPairSerializer):
     """로그인 실패 메시지를 한국어로 통일.
 
@@ -159,6 +206,15 @@ class LoginSerializer(TokenObtainPairSerializer):
     default_error_messages = {
         "no_active_account": "이메일 또는 비밀번호가 올바르지 않습니다."
     }
+
+    @classmethod
+    def get_token(cls, user):
+        # 비밀번호 검증을 통과한 뒤에만 여기 온다 — 미인증 여부는 계정 존재를
+        # 이미 아는 본인에게만 알려지므로 계정 열거로 이어지지 않는다.
+        # (validate() 안의 update_last_login 보다 먼저라 last_login 도 안 바뀐다.)
+        if user.email_verified_at is None:
+            raise EmailNotVerified()
+        return super().get_token(user)
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
