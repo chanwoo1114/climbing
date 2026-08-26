@@ -23,3 +23,6 @@ dist/
 .vscode/
 .DS_Store
 .admin-credentials
+
+# 개인용 Claude 스킬 — 팀 공유 안 함
+.claude/skills/

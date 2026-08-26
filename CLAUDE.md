@@ -45,6 +45,8 @@ dc exec web python manage.py test             # 전체 테스트
 dc exec web python manage.py test accounts    # 앱 단위 테스트
 dc exec web python manage.py spectacular --file schema.yml
 dc exec web sh -c "black . && flake8"         # 포맷 + 린트
+dc exec web python manage.py verify_email a@b.com   # 개발용: 메일 없이 이메일 인증 처리
+dc restart celery                             # tasks.py 추가/변경 후 (아래 주의 참고)
 
 # Frontend
 cd front
@@ -55,6 +57,9 @@ npm run typecheck    # tsc --noEmit
 
 소스는 볼륨 마운트되어 있어 코드 수정이 즉시 반영된다 (web=runserver 자동 리로드,
 celery=watchmedo 재시작, front=vite HMR). 재빌드가 필요한 건 의존성 변경 시뿐이다.
+주의: Windows 바인드 마운트에서는 watchmedo 파일 감지가 동작하지 않아 celery 는
+자동 재시작되지 않는다. 새 태스크를 만들거나 tasks.py 를 고치면 `dc restart celery`.
+개발 기본 EMAIL_BACKEND 는 콘솔이라 인증/재설정 메일 본문(링크)은 `dc logs celery` 에 찍힌다.
 
 ## Backend 규칙
 
@@ -94,15 +99,31 @@ celery=watchmedo 재시작, front=vite HMR). 재빌드가 필요한 건 의존�
 - 스타일은 Tailwind 유틸리티 클래스, 공통 컴포넌트는 `components/common/`
 - WebSocket은 `useChatSocket` 훅으로만 접근
 
-### 디자인 시스템 (Chalk & Terra)
+### 디자인 시스템 (Chalk & Hold)
 - 팔레트는 index.css의 @theme 토큰만 사용, 임의 hex 금지
-- 토큰: chalk(배경/보더), ink(텍스트 — 순수 black/gray-900 금지),
-  terra(primary CTA), ochre(서브 포인트), moss(success), slate(정보), danger(삭제/오류 전용)
-- terra-500은 화면당 주요 CTA 1개에만, danger는 삭제/오류 전용
+- 토큰: chalk(배경/보더 — 차가운 초크 회색, 따뜻한 크림 금지), ink(텍스트 — 매트 차콜, 순수 black/gray-900 금지),
+  hold(primary CTA — 암장 홀드 코발트), ochre(서브 포인트), moss(success), slate(정보), danger(삭제/오류 전용)
+- hold-500은 화면당 주요 CTA 1개에만, danger는 삭제/오류 전용
+- 팔레트 근거: 초크(배경)·매트(텍스트)·홀드(액센트). 크림+테라코타+세리프 조합은 AI 기본값이라 피한다 (frontend-design 스킬)
 - 배경 chalk-100, 카드 white + chalk-300 보더, radius 12~18px
 - 난이도 색상은 토큰이 아닌 GymDifficulty.color(DB 값)를 렌더링
 - 그라데이션/그림자 최소화, 플랫하게. 모바일 퍼스트, md: 이상에서 데스크톱 확장
 - 다크 모드는 범위 외 (M8 선택)
+
+### UI 품질 규칙 (Vercel Web Interface Guidelines + make-interfaces-feel-better 기준)
+- 버튼은 `components/common/Button`(primary/secondary) 사용. 직접 `<button className=...>` 만들지 말 것
+- 터치 영역 최소 44px (`min-h-11`). 텍스트 링크·아이콘 버튼도 패딩으로 확보
+- 카드 radius는 `rounded-card`(14px) 토큰, 안쪽 요소는 `rounded-xl`(12px). `rounded-[14px]` 하드코딩 금지
+- 포커스: 링크·버튼은 전역 `:focus-visible` 링(index.css)이 담당. `outline-none`은 대체 표시가 있을 때만
+- 전환은 바뀌는 속성만 명시 (`transition-colors`, `transition-[transform,opacity]`). `transition-all` 금지
+- 애니메이션은 `transform`/`opacity`만. 모션 축소는 index.css 전역 규칙이 처리
+- 동적 숫자(거리·개수·가격)는 `tabular-nums`, 짧은 본문·설명은 `text-pretty`, 제목은 전역 `text-wrap: balance`
+- 긴 사용자 텍스트(닉네임·상호명)는 `min-w-0 truncate` 또는 `break-words`. 빈 목록은 빈 상태 UI 필수
+- 동적 알림: 오류 `role="alert"`, 진행·완료 안내 `role="status"`. 아이콘만 있는 버튼은 `aria-label`
+- 이메일 입력은 `TextField type="email"`이 spellCheck/autoCapitalize/inputMode 를 알아서 끈다
+- 날짜·숫자 포맷은 `Intl.*` (하드코딩 금지). 파괴적 액션(삭제)은 확인 모달 또는 undo
+- 목록 50개 이상은 가상화. 탭·필터·페이지 상태는 URL 쿼리에 반영
+- 폰트는 Pretendard(index.html CDN) + 시스템 폴백. `--font-sans` 토큰 외 font-family 지정 금지
 
 ## Docker 파일 규칙
 
