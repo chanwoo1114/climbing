@@ -1,8 +1,10 @@
 import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
+import { getErrorCode, getErrorMessage } from '@/api/client'
+import Button from '@/components/common/Button'
 import TextField from '@/components/common/TextField'
-import { useLogin } from '@/hooks/useAuth'
+import { useLogin, useResendVerification } from '@/hooks/useAuth'
 import {
   checkEmail,
   EMAIL_MAX_LENGTH,
@@ -13,6 +15,7 @@ import {
 export default function Login() {
   const navigate = useNavigate()
   const login = useLogin()
+  const resend = useResendVerification()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
@@ -20,12 +23,21 @@ export default function Login() {
   const emailCheck = checkEmail(email)
   const canSubmit = emailCheck.state === 'valid' && password.length > 0
 
+  // 비밀번호는 맞는데 이메일 인증이 안 된 경우 — 오류가 아니라 안내로 보여준다.
+  const unverified = getErrorCode(login.error) === 'email_not_verified'
+
   // 인증 실패(401)는 어느 필드가 틀렸는지 알려주지 않는 게 원칙이라
   // 두 입력칸을 함께 빨갛게 표시하고 메시지는 배너로만 보여준다.
-  const failed = login.isError
+  const failed = login.isError && !unverified
   const credentialCheck: FieldCheck | undefined = failed
     ? { state: 'invalid', message: '' }
     : undefined
+
+  const edit = (setter: (v: string) => void) => (e: { target: { value: string } }) => {
+    if (login.isError) login.reset()
+    if (resend.isSuccess || resend.isError) resend.reset()
+    setter(e.target.value)
+  }
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -39,7 +51,7 @@ export default function Login() {
       <form
         onSubmit={onSubmit}
         noValidate
-        className="space-y-4 rounded-[14px] border border-chalk-300 bg-white p-6"
+        className="space-y-4 rounded-card border border-chalk-300 bg-white p-6"
       >
         <TextField
           label="이메일"
@@ -51,7 +63,7 @@ export default function Login() {
           maxLength={EMAIL_MAX_LENGTH}
           value={email}
           check={credentialCheck ?? emailCheck}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={edit(setEmail)}
         />
         <TextField
           label="비밀번호"
@@ -62,7 +74,7 @@ export default function Login() {
           maxLength={PASSWORD_MAX_LENGTH}
           value={password}
           check={credentialCheck}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={edit(setPassword)}
         />
 
         {failed && (
@@ -70,26 +82,50 @@ export default function Login() {
             role="alert"
             className="rounded-xl bg-danger-100 px-3 py-2 text-sm text-danger-600"
           >
-            {login.error instanceof Error && login.error.message
-              ? login.error.message
-              : '이메일 또는 비밀번호가 올바르지 않습니다.'}
+            {getErrorMessage(login.error, '이메일 또는 비밀번호가 올바르지 않습니다.')}
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={!canSubmit || login.isPending}
-          className="w-full rounded-xl bg-terra-500 py-2.5 font-medium text-white hover:bg-terra-600 disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        {unverified && (
+          <div className="space-y-2 rounded-xl bg-ochre-100 px-3 py-2 text-sm text-ink-700">
+            <p>이메일 인증이 아직 안 됐어요. 메일함의 인증 링크를 눌러 주세요.</p>
+            {resend.isSuccess ? (
+              <p role="status" className="text-moss-500">인증 메일을 다시 보냈습니다.</p>
+            ) : (
+              <button
+                type="button"
+                onClick={() => resend.mutate(email)}
+                disabled={resend.isPending}
+                className="inline-flex min-h-10 items-center font-medium text-hold-600 hover:underline disabled:opacity-50"
+              >
+                {resend.isPending ? '보내는 중…' : '인증 메일 다시 보내기'}
+              </button>
+            )}
+            {resend.isError && (
+              <p role="alert" className="text-danger-600">
+                {getErrorMessage(resend.error, '메일을 보내지 못했습니다. 잠시 후 다시 시도해 주세요.')}
+              </p>
+            )}
+          </div>
+        )}
+
+        <Button type="submit" full disabled={!canSubmit || login.isPending}>
           {login.isPending ? '로그인 중…' : '로그인'}
-        </button>
+        </Button>
       </form>
-      <p className="mt-4 text-center text-sm text-ink-400">
-        아직 계정이 없나요?{' '}
-        <Link to="/signup" className="font-medium text-terra-600 hover:underline">
-          회원가입
-        </Link>
-      </p>
+      <div className="mt-4 space-y-1 text-center text-sm text-ink-400">
+        <p>
+          <Link to="/forgot-password" className="hover:underline">
+            비밀번호를 잊으셨나요?
+          </Link>
+        </p>
+        <p>
+          아직 계정이 없나요?{' '}
+          <Link to="/signup" className="font-medium text-hold-600 hover:underline">
+            회원가입
+          </Link>
+        </p>
+      </div>
     </div>
   )
 }

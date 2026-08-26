@@ -8,8 +8,9 @@ interface Props extends InputHTMLAttributes<HTMLInputElement> {
   check?: FieldCheck
 }
 
+// 포커스는 outline 대신 보더색으로 표시한다 (outline-none 의 대체 수단).
 const BORDER = {
-  idle: 'border-chalk-300 focus:border-terra-300',
+  idle: 'border-chalk-300 focus:border-hold-300',
   valid: 'border-moss-400 focus:border-moss-500',
   invalid: 'border-danger-500 focus:border-danger-600',
 } as const
@@ -20,7 +21,15 @@ const MESSAGE = {
   invalid: 'text-danger-500',
 } as const
 
-export default function TextField({ label, id, check, ...rest }: Props) {
+// 이메일 칸은 모바일 자동 대문자·자동 수정·맞춤법 검사가 입력을 망친다.
+const EMAIL_DEFAULTS = {
+  spellCheck: false,
+  autoCapitalize: 'none',
+  autoCorrect: 'off',
+  inputMode: 'email',
+} as const
+
+export default function TextField({ label, id, check, type, ...rest }: Props) {
   const inputId = id ?? rest.name
   const state = check?.state ?? 'idle'
   const messageId = `${inputId}-message`
@@ -33,9 +42,11 @@ export default function TextField({ label, id, check, ...rest }: Props) {
         <div className="relative">
           <input
             id={inputId}
+            type={type}
             aria-invalid={state === 'invalid'}
             aria-describedby={hasMessage ? messageId : undefined}
-            className={`w-full rounded-xl border bg-white px-3 py-2.5 pr-9 text-ink-700 placeholder:text-ink-300 focus:outline-none ${BORDER[state]}`}
+            className={`min-h-11 w-full rounded-xl border bg-white px-3 py-2.5 pr-9 text-ink-700 transition-colors duration-150 placeholder:text-ink-300 focus:outline-none ${BORDER[state]}`}
+            {...(type === 'email' ? EMAIL_DEFAULTS : {})}
             {...rest}
           />
           {state !== 'idle' && (
@@ -48,11 +59,14 @@ export default function TextField({ label, id, check, ...rest }: Props) {
           )}
         </div>
       </label>
-      {hasMessage && (
-        <p id={messageId} className={`mt-1 text-xs ${MESSAGE[state]}`}>
-          {check.message}
-        </p>
-      )}
+      {/* 입력 중 바뀌는 메시지 — 스크린리더에 조용히 알린다 */}
+      <p
+        id={messageId}
+        aria-live="polite"
+        className={`mt-1 text-xs text-pretty ${MESSAGE[state]} ${hasMessage ? '' : 'hidden'}`}
+      >
+        {hasMessage ? check.message : ''}
+      </p>
     </div>
   )
 }

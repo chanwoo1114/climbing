@@ -11,6 +11,11 @@ import { create } from 'zustand'
 const REFRESH_STORAGE_KEY = 'climbing.refresh'
 const AUTH_BASE = import.meta.env.VITE_API_BASE_URL || '/api/v1'
 
+/** 저장된 refresh 토큰. 키 문자열을 밖에서 직접 쓰지 않도록 여기서만 읽는다. */
+export function getRefreshToken(): string | null {
+  return localStorage.getItem(REFRESH_STORAGE_KEY)
+}
+
 interface AuthUser {
   id: number
   email: string
@@ -35,7 +40,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   refresh: async () => {
-    const refreshToken = localStorage.getItem(REFRESH_STORAGE_KEY)
+    const refreshToken = getRefreshToken()
     if (!refreshToken) return false
     try {
       // 인터셉터 재귀를 피하려고 기본 axios를 쓴다.

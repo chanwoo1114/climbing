@@ -1,29 +1,34 @@
 @import "tailwindcss";
 
-/* 디자인 시스템: Chalk & Terra
+/* 디자인 시스템: Chalk & Hold
    - 임의 hex 금지. 아래 토큰만 사용한다.
-   - terra-500은 화면당 주요 CTA 1개에만, danger는 삭제/오류 전용.
+   - hold-500은 화면당 주요 CTA 1개에만, danger는 삭제/오류 전용.
    - 난이도 색은 토큰이 아닌 GymDifficulty.color(DB 값)를 렌더링. */
 @theme {
-  /* 배경 / 보더 */
-  --color-chalk-50: #fbfaf8;
-  --color-chalk-100: #f6f3ee;
-  --color-chalk-200: #efeae2;
-  --color-chalk-300: #e2dbd0;
-  --color-chalk-400: #cfc5b6;
+  /* 타이포 — Pretendard(한글 최적화 산세리프) + 시스템 폴백. index.html 에서 로드 */
+  --font-sans:
+    "Pretendard Variable", Pretendard, -apple-system, BlinkMacSystemFont,
+    "Apple SD Gothic Neo", "Noto Sans KR", "Segoe UI", Roboto, sans-serif;
 
-  /* 텍스트 (순수 black/gray-900 금지) */
-  --color-ink-300: #a9a196;
-  --color-ink-400: #857c70;
-  --color-ink-500: #5f574c;
-  --color-ink-600: #443d34;
-  --color-ink-700: #2f2a23;
+  /* 배경 / 보더 — 초크 가루·회색 벽의 차가운 중성색 (따뜻한 크림 #f4f1ea 계열은 AI 기본값이라 피함) */
+  --color-chalk-50: #fafbfa;
+  --color-chalk-100: #f3f5f4;
+  --color-chalk-200: #eaedeb;
+  --color-chalk-300: #dde2df;
+  --color-chalk-400: #c5ccc8;
 
-  /* primary CTA */
-  --color-terra-100: #f7e3da;
-  --color-terra-300: #dfa287;
-  --color-terra-500: #c2643f;
-  --color-terra-600: #a5502f;
+  /* 텍스트 — 매트 차콜 (순수 black/gray-900 금지) */
+  --color-ink-300: #9aa1a6;
+  --color-ink-400: #6f777d;
+  --color-ink-500: #4f575d;
+  --color-ink-600: #363c41;
+  --color-ink-700: #23272a;
+
+  /* primary CTA — 암장 홀드 색(코발트). 화면당 주요 CTA 1개에만 */
+  --color-hold-100: #e3eafb;
+  --color-hold-300: #8fa8ee;
+  --color-hold-500: #2456d6;
+  --color-hold-600: #1c46b0;
 
   /* 서브 포인트 */
   --color-ochre-100: #faeed2;
@@ -45,6 +50,7 @@
   --color-danger-500: #c04a38;
   --color-danger-600: #a13a2a;
 
+  /* 카드 radius — rounded-card 로 사용. 안쪽 요소(rounded-xl=12px)와 동심 */
   --radius-card: 14px;
 }
 
@@ -54,8 +60,46 @@ body,
   height: 100%;
 }
 
+html {
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  /* 모바일 더블탭 확대 지연 제거, 탭 하이라이트는 포커스 링으로 대체 */
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   background-color: var(--color-chalk-100);
   color: var(--color-ink-600);
-  -webkit-font-smoothing: antialiased;
+}
+
+/* 키보드 포커스 — 링크·버튼은 전부 이 링으로 보인다. 입력칸은 보더색 변화로 대신한다.
+   :where 로 특이도를 0으로 둬서 컴포넌트 클래스가 필요하면 덮어쓸 수 있게. */
+:where(a, button, [role="button"], summary):focus-visible {
+  outline: 2px solid var(--color-hold-500);
+  outline-offset: 2px;
+}
+
+/* 제목은 마지막 줄에 한 단어만 남지 않게 */
+:where(h1, h2, h3) {
+  text-wrap: balance;
+}
+
+/* 이미지 가장자리가 배경에 묻히지 않게 — 브랜드색이 아닌 중립 알파 */
+img {
+  outline: 1px solid rgb(0 0 0 / 0.1);
+  outline-offset: -1px;
+}
+
+/* 모션 축소 설정 존중 */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

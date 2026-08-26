@@ -28,6 +28,17 @@ export function getFieldError(error: unknown, field: string): string | undefined
   return fields?.[field]?.[0]
 }
 
+/** 서버 error.code — 'email_not_verified', 'invalid_token', 'throttled' 등 */
+export function getErrorCode(error: unknown): string | undefined {
+  return (error as ApiError | undefined)?.code
+}
+
+/** 사용자에게 보여줄 메시지. 서버 메시지가 없으면 fallback */
+export function getErrorMessage(error: unknown, fallback: string): string {
+  const message = (error as Error | undefined)?.message
+  return message || fallback
+}
+
 export const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL || '/api/v1',
   withCredentials: true,

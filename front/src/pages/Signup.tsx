@@ -2,9 +2,10 @@ import { useMemo, useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router'
 
 import { getFieldError } from '@/api/client'
+import Button from '@/components/common/Button'
 import PasswordRuleList from '@/components/common/PasswordRuleList'
 import TextField from '@/components/common/TextField'
-import { useLogin, useRegister } from '@/hooks/useAuth'
+import { useRegister } from '@/hooks/useAuth'
 import {
   checkEmail,
   checkNickname,
@@ -18,14 +19,13 @@ import {
 export default function Signup() {
   const navigate = useNavigate()
   const registerMutation = useRegister()
-  const login = useLogin()
 
   const [email, setEmail] = useState('')
   const [nickname, setNickname] = useState('')
   const [password, setPassword] = useState('')
   const [passwordConfirm, setPasswordConfirm] = useState('')
 
-  const error = registerMutation.error ?? login.error
+  const error = registerMutation.error
 
   // 서버가 돌려준 필드 오류가 있으면 클라이언트 검증 결과보다 우선한다.
   const withServerError = (check: FieldCheck, field: string): FieldCheck => {
@@ -50,7 +50,14 @@ export default function Signup() {
     [email, nickname, password, confirmCheck.state],
   )
 
-  const pending = registerMutation.isPending || login.isPending
+  const pending = registerMutation.isPending
+
+  // 입력을 고치기 시작하면 이전 서버 오류(빨간 메시지)를 지운다.
+  const edit =
+    (setter: (value: string) => void) => (e: { target: { value: string } }) => {
+      if (registerMutation.isError) registerMutation.reset()
+      setter(e.target.value)
+    }
 
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
@@ -58,16 +65,19 @@ export default function Signup() {
     registerMutation.mutate(
       { email, nickname, password },
       {
-        // 가입 성공 시 바로 로그인까지
+        // 이메일 인증 전에는 로그인할 수 없으므로 "메일 확인" 안내로 보낸다.
         onSuccess: () =>
-          login.mutate({ email, password }, { onSuccess: () => navigate('/') }),
+          navigate('/signup/sent', { replace: true, state: { email } }),
       },
     )
   }
 
   // 필드별로 표시된 오류는 아래 공통 배너에서 중복 노출하지 않는다.
   const generalError =
-    error && !getFieldError(error, 'email') && !getFieldError(error, 'nickname')
+    error &&
+    !getFieldError(error, 'email') &&
+    !getFieldError(error, 'nickname') &&
+    !getFieldError(error, 'password')
       ? error.message
       : null
 
@@ -77,7 +87,7 @@ export default function Signup() {
       <form
         onSubmit={onSubmit}
         noValidate
-        className="space-y-4 rounded-[14px] border border-chalk-300 bg-white p-6"
+        className="space-y-4 rounded-card border border-chalk-300 bg-white p-6"
       >
         <TextField
           label="이메일"
@@ -89,18 +99,19 @@ export default function Signup() {
           maxLength={EMAIL_MAX_LENGTH}
           value={email}
           check={emailCheck}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={edit(setEmail)}
         />
         <TextField
           label="닉네임"
           name="nickname"
           autoComplete="nickname"
+          spellCheck={false}
           placeholder="2~30자, 한글·영문·숫자"
           required
           maxLength={30}
           value={nickname}
           check={nicknameCheck}
-          onChange={(e) => setNickname(e.target.value)}
+          onChange={edit(setNickname)}
         />
         <div>
           <TextField
@@ -118,7 +129,7 @@ export default function Signup() {
                 ? passwordCheck
                 : { ...passwordCheck, message: getFieldError(error, 'password') ?? '' }
             }
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={edit(setPassword)}
           />
           <PasswordRuleList password={password} context={{ email, nickname }} />
         </div>
@@ -130,7 +141,7 @@ export default function Signup() {
           required
           value={passwordConfirm}
           check={confirmCheck}
-          onChange={(e) => setPasswordConfirm(e.target.value)}
+          onChange={edit(setPasswordConfirm)}
         />
 
         {generalError && (
@@ -142,17 +153,13 @@ export default function Signup() {
           </p>
         )}
 
-        <button
-          type="submit"
-          disabled={!canSubmit || pending}
-          className="w-full rounded-xl bg-terra-500 py-2.5 font-medium text-white hover:bg-terra-600 disabled:cursor-not-allowed disabled:opacity-50"
-        >
+        <Button type="submit" full disabled={!canSubmit || pending}>
           {pending ? '가입 중…' : '회원가입'}
-        </button>
+        </Button>
       </form>
       <p className="mt-4 text-center text-sm text-ink-400">
         이미 계정이 있나요?{' '}
-        <Link to="/login" className="font-medium text-terra-600 hover:underline">
+        <Link to="/login" className="font-medium text-hold-600 hover:underline">
           로그인
         </Link>
       </p>
