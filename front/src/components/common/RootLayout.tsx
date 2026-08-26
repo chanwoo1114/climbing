@@ -1,6 +1,7 @@
 import { Link, Outlet } from 'react-router'
 
 import { useLogout, useMe } from '@/hooks/useAuth'
+import { useAuthStore } from '@/stores/authStore'
 
 // 헤더의 텍스트 링크/버튼은 글자가 작아도 44px 높이의 터치 영역을 갖는다.
 const HEADER_ACTION =
@@ -9,6 +10,7 @@ const HEADER_ACTION =
 export default function RootLayout() {
   const { data: me } = useMe()
   const logout = useLogout()
+  const booting = useAuthStore((s) => s.status === 'booting')
 
   return (
     <div className="min-h-full bg-chalk-100">
@@ -42,6 +44,9 @@ export default function RootLayout() {
                 {logout.isPending ? '로그아웃 중…' : '로그아웃'}
               </button>
             </div>
+          ) : booting ? (
+            // 새로고침 직후 세션 복원 중 — '로그인'이 잠깐 떴다 사라지지 않게 자리만 비워둔다
+            <span aria-hidden className="min-h-11 w-14" />
           ) : (
             <Link to="/login" className={`${HEADER_ACTION} -mr-2 text-ink-500 hover:text-ink-700`}>
               로그인

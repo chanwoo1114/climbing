@@ -1,5 +1,6 @@
 import { createBrowserRouter } from 'react-router'
 
+import RequireAuth from '@/components/common/RequireAuth'
 import RootLayout from '@/components/common/RootLayout'
 import ForgotPassword from '@/pages/ForgotPassword'
 import Login from '@/pages/Login'
@@ -23,8 +24,14 @@ export const router = createBrowserRouter([
       { path: 'verify-email', element: <VerifyEmail /> },
       { path: 'forgot-password', element: <ForgotPassword /> },
       { path: 'reset-password', element: <ResetPassword /> },
-      // TODO: GymDetail, Feed, LogCreate, Profile,
-      //       ChatList, ChatRoom, Board, PostDetail, CrewList, AnalysisResult
+      {
+        // 로그인 필요 — 비로그인이면 /login 으로, 로그인 후 원래 경로로 복귀
+        element: <RequireAuth />,
+        children: [
+          // TODO(M2~): LogCreate, Profile, ChatList, ChatRoom, CrewList, AnalysisResult
+        ],
+      },
+      // TODO: GymDetail, Feed, Board, PostDetail (공개)
     ],
   },
 ])

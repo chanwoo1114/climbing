@@ -56,7 +56,9 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// 응답: 래퍼 해제 + snake_case → camelCase, 401이면 refresh 1회 재시도
+// 응답: 래퍼 해제 + snake_case → camelCase, 401이면 refresh 1회 재시도.
+// 동시에 여러 요청이 401 을 받아도 authStore.refresh() 가 single-flight 라 재발급은 한 번만 나간다.
+// refresh 가 거부되면 store 가 세션을 지우고, 보호 라우트는 RequireAuth 가 /login 으로 보낸다.
 api.interceptors.response.use(
   (response) => {
     const envelope = response.data as ApiEnvelope<unknown>
@@ -74,7 +76,6 @@ api.interceptors.response.use(
       original._retried = true
       const refreshed = await useAuthStore.getState().refresh()
       if (refreshed) return api(original)
-      useAuthStore.getState().clear()
     }
 
     const apiError = error.response?.data?.error

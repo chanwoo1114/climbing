@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router'
+import { Link, useLocation, useNavigate } from 'react-router'
 
 import { getErrorCode, getErrorMessage } from '@/api/client'
 import Button from '@/components/common/Button'
@@ -14,8 +14,11 @@ import {
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const login = useLogin()
   const resend = useResendVerification()
+  // RequireAuth 가 보낸 경우 로그인 후 원래 경로로 돌아간다.
+  const from = (location.state as { from?: string } | null)?.from ?? '/'
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
 
@@ -42,7 +45,7 @@ export default function Login() {
   const onSubmit = (e: FormEvent) => {
     e.preventDefault()
     if (!canSubmit || login.isPending) return
-    login.mutate({ email, password }, { onSuccess: () => navigate('/') })
+    login.mutate({ email, password }, { onSuccess: () => navigate(from, { replace: true }) })
   }
 
   return (
