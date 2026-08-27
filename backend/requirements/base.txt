@@ -17,3 +17,6 @@ redis==5.2.1
 
 boto3==1.35.90
 gunicorn==23.0.0
+
+# 영상 분석 지표 계산(analysis.pipeline.compute_metrics) — web 에서도 단위 테스트한다
+numpy==1.26.4

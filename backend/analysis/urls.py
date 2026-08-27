@@ -1,7 +1,11 @@
-from django.urls import path  # noqa: F401
+from django.urls import path
+
+from analysis.views import VideoAnalysisDetailView, VideoAnalysisListCreateView
 
 app_name = "analysis"
 
+# config.urls 에서 "analyses/" 프리픽스로 include 된다.
 urlpatterns = [
-    # TODO: docs/개발정의.md 6장 API 설계 참고
+    path("", VideoAnalysisListCreateView.as_view(), name="analysis-list"),
+    path("<int:pk>/", VideoAnalysisDetailView.as_view(), name="analysis-detail"),
 ]
