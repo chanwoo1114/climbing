@@ -6,7 +6,7 @@ from rest_framework.views import APIView
 from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from rest_framework_simplejwt.views import TokenObtainPairView
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from accounts import services
 from accounts.serializers import (
@@ -15,6 +15,7 @@ from accounts.serializers import (
     LogoutSerializer,
     MeSerializer,
     PasswordResetConfirmSerializer,
+    RefreshSerializer,
     RegisterSerializer,
     UserSerializer,
     VerifyEmailSerializer,
@@ -52,6 +53,13 @@ class LoginView(ThrottledMessageMixin, TokenObtainPairView):
 
 
 @extend_schema(tags=["auth"], request=LogoutSerializer, responses={204: None})
+@extend_schema(tags=["auth"])
+class RefreshView(TokenRefreshView):
+    """access 재발급. 탈퇴·비활성 계정의 refresh 는 401."""
+
+    serializer_class = RefreshSerializer
+
+
 class LogoutView(APIView):
     """refresh 토큰을 블랙리스트에 올려 로그아웃 처리한다."""
 

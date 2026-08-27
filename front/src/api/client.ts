@@ -76,6 +76,10 @@ api.interceptors.response.use(
       original._retried = true
       const refreshed = await useAuthStore.getState().refresh()
       if (refreshed) return api(original)
+    } else if (error.response?.status === 401 && original?._retried) {
+      // 재발급까지 했는데도 401 — 토큰의 주인이 사라진(탈퇴 등) 경우다.
+      // 공개 API 까지 이 토큰 때문에 막히지 않게 세션을 버린다 (다음 요청은 비로그인으로 나간다).
+      useAuthStore.getState().clear()
     }
 
     const apiError = error.response?.data?.error

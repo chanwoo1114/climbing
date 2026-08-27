@@ -3,9 +3,13 @@ from django.core.exceptions import ValidationError as DjangoValidationError
 from django.core.validators import RegexValidator
 from rest_framework import serializers
 from rest_framework.validators import UniqueValidator
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
+from rest_framework_simplejwt.serializers import (
+    TokenObtainPairSerializer,
+    TokenRefreshSerializer,
+)
+from rest_framework_simplejwt.settings import api_settings as jwt_settings
 
-from accounts.exceptions import EmailNotVerified
+from accounts.exceptions import EmailNotVerified, UserInactive
 from accounts.models import User
 from gyms.models import Gym
 
@@ -254,3 +258,19 @@ class LoginSerializer(TokenObtainPairSerializer):
             style={"input_type": "password"},
         )
 
+
+class RefreshSerializer(TokenRefreshSerializer):
+    """refresh 시 토큰 주인이 아직 유효한지 확인한다.
+
+    simplejwt 기본 구현은 서명·만료만 보고 새 access 를 내준다. 그러면 탈퇴(soft
+    delete)하거나 비활성화된 계정도 refresh 만료(14일)까지 access 를 계속 받는다.
+    User.objects 는 is_deleted=False 만 반환하므로 탈퇴 계정은 여기서 걸린다.
+    """
+
+    def validate(self, attrs):
+        # super() 는 ROTATE+BLACKLIST 로 이 토큰을 블랙리스트에 올리므로, 파싱과
+        # 유저 확인은 그 전에 한다. 서명·만료 오류는 TokenError → 뷰가 401 로 바꾼다.
+        user_id = self.token_class(attrs["refresh"]).get(jwt_settings.USER_ID_CLAIM)
+        if not User.objects.filter(pk=user_id, is_active=True).exists():
+            raise UserInactive()
+        return super().validate(attrs)

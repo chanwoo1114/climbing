@@ -1,6 +1,8 @@
 from django.urls import reverse
 from rest_framework.test import APITestCase
 
+from rest_framework_simplejwt.tokens import RefreshToken
+
 from accounts.tests.helpers import create_verified_user
 
 
@@ -55,3 +57,30 @@ class JwtLoginTests(APITestCase):
     def test_logout_requires_auth(self):
         response = self.client.post(reverse("v1:auth:logout"), {"refresh": "x"})
         self.assertEqual(response.status_code, 401)
+
+
+class RefreshUserCheckTests(APITestCase):
+    """refresh 는 서명만이 아니라 토큰 주인이 아직 유효한지도 본다."""
+
+    def setUp(self):
+        self.user = create_verified_user(email="r@example.com", nickname="refresher")
+        self.refresh = str(RefreshToken.for_user(self.user))
+
+    def _refresh(self):
+        return self.client.post(
+            reverse("v1:auth:refresh"), {"refresh": self.refresh}, format="json"
+        )
+
+    def test_refresh_succeeds_for_live_user(self):
+        self.assertEqual(self._refresh().status_code, 200)
+
+    def test_refresh_rejected_after_soft_delete(self):
+        self.user.delete()  # soft delete → objects 에서 제외
+        response = self._refresh()
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"]["code"], "user_inactive")
+
+    def test_refresh_rejected_for_inactive_user(self):
+        self.user.is_active = False
+        self.user.save(update_fields=["is_active"])
+        self.assertEqual(self._refresh().status_code, 401)
