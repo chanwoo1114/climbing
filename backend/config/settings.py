@@ -49,6 +49,7 @@ LOCAL_APPS = [
     "crews",
     "chat",
     "analysis",
+    "notifications",
 ]
 
 INSTALLED_APPS = DJANGO_APPS + THIRD_PARTY_APPS + LOCAL_APPS
@@ -151,6 +152,7 @@ REST_FRAMEWORK = {
         "register": "5/hour",  # 봇 대량 가입
         "email_send": "5/hour",  # 인증 메일 재전송·재설정 요청
         "token_confirm": "10/min",  # 토큰 추측
+        "social_login": "10/min",  # 카카오 콜백 (code 는 1회용)
     },
 }
 
@@ -164,6 +166,12 @@ SIMPLE_JWT = {
 
 SPECTACULAR_SETTINGS = {
     "TITLE": "Climbing API",
+    # 같은 필드명(join_type) 의 enum 이 앱마다 달라 이름이 충돌한다 — 명시적으로 분리
+    "ENUM_NAME_OVERRIDES": {
+        "RecruitmentJoinTypeEnum": "community.models.RECRUITMENT_JOIN_TYPE_CHOICES",
+        "CrewJoinTypeEnum": "crews.models.CREW_JOIN_TYPE_CHOICES",
+        "NotificationTypeEnum": "notifications.models.NOTIFICATION_TYPE_CHOICES",
+    },
     "DESCRIPTION": "클라이밍 암장 정보 + 등반 기록 SNS + 커뮤니티 + AI 자세 분석",
     "VERSION": "1.0.0",
     "SERVE_INCLUDE_SCHEMA": False,
@@ -180,6 +188,20 @@ FRONTEND_BASE_URL = env("FRONTEND_BASE_URL", default="http://localhost:5180").rs
 )
 EMAIL_VERIFICATION_TIMEOUT = env.int("EMAIL_VERIFICATION_TIMEOUT", default=60 * 60 * 24)
 PASSWORD_RESET_TIMEOUT = env.int("PASSWORD_RESET_TIMEOUT", default=60 * 60)
+
+# --- 카카오 소셜 로그인 (accounts/social) ---------------------------------
+# client_id 는 카카오 developers 의 REST API 키. 암장 수집용 KAKAO_REST_API_KEY 와
+# 같은 앱을 쓰면 그 값을 그대로 재사용한다. 비어 있으면 API 가 503 kakao_not_configured.
+KAKAO_CLIENT_ID = env("KAKAO_CLIENT_ID", default=env("KAKAO_REST_API_KEY", default=""))
+# 카카오 콘솔에서 "Client Secret" 을 켠 경우에만 채운다.
+KAKAO_CLIENT_SECRET = env("KAKAO_CLIENT_SECRET", default="")
+# 카카오 콘솔 Redirect URI 에 등록한 프론트 라우트. 콜백은 프론트가 받아서
+# code/state 를 POST /api/v1/auth/kakao/callback/ 으로 넘긴다.
+KAKAO_REDIRECT_URI = env(
+    "KAKAO_REDIRECT_URI", default=f"{FRONTEND_BASE_URL}/auth/kakao/callback"
+)
+# authorize 에서 발급한 state 의 유효 시간(초)
+KAKAO_STATE_TIMEOUT = env.int("KAKAO_STATE_TIMEOUT", default=600)
 
 # 개발 기본은 콘솔 출력 — 메일 본문이 celery 워커 로그에 찍힌다.
 # 프로덕션은 .env 에서 smtp 백엔드와 호스트 정보를 채운다.
@@ -224,6 +246,10 @@ AWS_ACCESS_KEY_ID = env("AWS_ACCESS_KEY_ID", default="")
 AWS_SECRET_ACCESS_KEY = env("AWS_SECRET_ACCESS_KEY", default="")
 AWS_STORAGE_BUCKET_NAME = env("AWS_STORAGE_BUCKET_NAME", default="")
 AWS_S3_REGION_NAME = env("AWS_S3_REGION_NAME", default="ap-northeast-2")
+# MinIO / Cloudflare R2 등 S3 호환 스토리지용. 비우면 AWS 기본 엔드포인트.
+AWS_S3_ENDPOINT_URL = env("AWS_S3_ENDPOINT_URL", default="") or None
+# 업로드된 파일의 공개 URL 베이스 (CDN). 비우면 버킷 URL 로 만든다.
+MEDIA_PUBLIC_BASE_URL = env("MEDIA_PUBLIC_BASE_URL", default="").rstrip("/")
 S3_PRESIGNED_EXPIRE_SECONDS = env.int("S3_PRESIGNED_EXPIRE_SECONDS", default=300)
 
 # --- 영상 분석 제약 (docs/개발정의.md 4장) --------------------------------

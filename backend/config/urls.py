@@ -17,6 +17,7 @@ api_v1 = [
     path("", include("community.urls")),  # posts/, recruitment
     path("crews/", include("crews.urls")),
     path("chat/", include("chat.urls")),
+    path("notifications/", include("notifications.urls")),
     path("analyses/", include("analysis.urls")),
     path("", include("common.urls")),  # uploads/presigned-url
 ]

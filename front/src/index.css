@@ -52,6 +52,19 @@
 
   /* 카드 radius — rounded-card 로 사용. 안쪽 요소(rounded-xl=12px)와 동심 */
   --radius-card: 14px;
+
+  /* 토스트 등장 (components/common/Toast) — transform/opacity 만. 모션 축소는 아래 전역 규칙이 끈다 */
+  --animate-toast-in: toast-in 200ms ease-out both;
+  @keyframes toast-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 html,
