@@ -1,6 +1,8 @@
 from django.urls import path
 
 from accounts.views import (
+    KakaoAuthorizeView,
+    KakaoCallbackView,
     RefreshView,
     LoginView,
     LogoutView,
@@ -8,6 +10,8 @@ from accounts.views import (
     PasswordResetRequestView,
     RegisterView,
     ResendVerificationView,
+    SocialAccountListView,
+    SocialAccountUnlinkView,
     VerifyEmailView,
 )
 
@@ -33,5 +37,14 @@ urlpatterns = [
         "password-reset/confirm/",
         PasswordResetConfirmView.as_view(),
         name="password-reset-confirm",
+    ),
+    # 소셜 로그인 (accounts/social)
+    path("kakao/authorize/", KakaoAuthorizeView.as_view(), name="kakao-authorize"),
+    path("kakao/callback/", KakaoCallbackView.as_view(), name="kakao-callback"),
+    path("social/", SocialAccountListView.as_view(), name="social-list"),
+    path(
+        "social/<str:provider>/",
+        SocialAccountUnlinkView.as_view(),
+        name="social-unlink",
     ),
 ]

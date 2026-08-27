@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useLocation } from 'react-router'
 
-import type { Me, MeUpdate } from '@/api/auth'
-import { getFieldError } from '@/api/client'
+import type { Me, MeUpdate, SocialAccount, SocialProvider } from '@/api/auth'
+import { getErrorMessage, getFieldError } from '@/api/client'
 import Button from '@/components/common/Button'
+import ConfirmDialog from '@/components/common/ConfirmDialog'
 import SelectField from '@/components/common/SelectField'
 import TextArea from '@/components/common/TextArea'
 import TextField from '@/components/common/TextField'
-import { useMe, useUpdateMe } from '@/hooks/useAuth'
+import { useMe, useSocialAccounts, useUnlinkSocial, useUpdateMe } from '@/hooks/useAuth'
 import { useGyms } from '@/hooks/useGyms'
 import { checkNickname, type FieldCheck } from '@/lib/validation'
 
@@ -40,6 +42,9 @@ export default function Profile() {
 const toSelectValue = (gymId: number | null) => (gymId === null ? '' : String(gymId))
 
 function ProfileForm({ me }: { me: Me }) {
+  const location = useLocation()
+  // 카카오로 막 가입한 경우 KakaoCallback 이 state.welcome 을 실어 보낸다 — 닉네임은 카카오 것 그대로다
+  const welcome = (location.state as { welcome?: string } | null)?.welcome === 'kakao'
   const updateMutation = useUpdateMe()
   // 홈짐 후보 — 지도 검색 전까지는 전체 목록에서 고른다
   const gyms = useGyms()
@@ -124,6 +129,14 @@ function ProfileForm({ me }: { me: Me }) {
   return (
     <div className="mx-auto mt-4 max-w-sm md:mt-10">
       <h1 className="mb-6 text-2xl font-semibold text-ink-700">내 프로필</h1>
+      {welcome && (
+        <p
+          role="status"
+          className="mb-4 rounded-xl bg-moss-100 px-3 py-2 text-sm text-pretty text-ink-700"
+        >
+          카카오 계정으로 가입을 마쳤어요. 닉네임을 확인해 주세요.
+        </p>
+      )}
       <form
         onSubmit={onSubmit}
         noValidate
@@ -188,9 +201,105 @@ function ProfileForm({ me }: { me: Me }) {
           {pending ? '저장 중…' : '저장'}
         </Button>
       </form>
+
+      <ConnectedAccounts />
+
       <p className="mt-4 text-center text-xs text-ink-400">
         {joinedAt.format(new Date(me.createdAt))} 가입
       </p>
     </div>
+  )
+}
+
+const PROVIDER_LABEL: Record<SocialProvider, string> = { kakao: '카카오' }
+
+/**
+ * 연결된 소셜 계정. 로그인 상태에서 새로 연결하는 API 는 없다 —
+ * 카카오로 로그인하면 이메일이 같을 때 서버가 자동으로 연결한다.
+ */
+function ConnectedAccounts() {
+  const accounts = useSocialAccounts()
+  const unlink = useUnlinkSocial()
+  const [target, setTarget] = useState<SocialAccount | null>(null)
+
+  const confirmUnlink = () => {
+    if (!target) return
+    unlink.mutate(target.provider, { onSettled: () => setTarget(null) })
+  }
+
+  let body
+  if (accounts.isPending) {
+    body = (
+      <p role="status" className="text-sm text-ink-400">
+        불러오는 중…
+      </p>
+    )
+  } else if (accounts.isError) {
+    body = (
+      <p role="alert" className="text-sm text-danger-600">
+        연결된 계정을 불러오지 못했습니다.
+      </p>
+    )
+  } else if (accounts.data.length === 0) {
+    body = (
+      <p className="text-sm text-pretty text-ink-400">
+        연결된 계정이 없어요. 카카오로 로그인하면 자동으로 연결돼요.
+      </p>
+    )
+  } else {
+    body = (
+      <ul className="divide-y divide-chalk-200">
+        {accounts.data.map((account) => (
+          <li key={account.provider} className="flex items-center gap-3 py-2">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-ink-700">{PROVIDER_LABEL[account.provider]}</p>
+              <p className="truncate text-xs text-ink-400">
+                {account.emailAtProvider || '이메일 미제공'} ·{' '}
+                {joinedAt.format(new Date(account.connectedAt))} 연결
+              </p>
+            </div>
+            <Button
+              variant="secondary"
+              disabled={unlink.isPending}
+              onClick={() => {
+                unlink.reset()
+                setTarget(account)
+              }}
+            >
+              연결 해제
+            </Button>
+          </li>
+        ))}
+      </ul>
+    )
+  }
+
+  return (
+    <section
+      aria-labelledby="connected-accounts"
+      className="mt-4 space-y-3 rounded-card border border-chalk-300 bg-white p-6"
+    >
+      <h2 id="connected-accounts" className="text-base font-semibold text-ink-700">
+        연결된 계정
+      </h2>
+      {body}
+      {unlink.isError && (
+        <p role="alert" className="rounded-xl bg-danger-100 px-3 py-2 text-sm text-pretty text-danger-600">
+          {getErrorMessage(unlink.error, '연결을 해제하지 못했습니다. 잠시 후 다시 시도해 주세요.')}
+        </p>
+      )}
+      <ConfirmDialog
+        open={target !== null}
+        title={`${target ? PROVIDER_LABEL[target.provider] : ''} 연결을 해제할까요?`}
+        description="해제하면 이 계정으로는 로그인할 수 없어요. 비밀번호가 있다면 이메일로는 계속 로그인할 수 있습니다."
+        confirmLabel="연결 해제"
+        pendingLabel="해제 중…"
+        pending={unlink.isPending}
+        onConfirm={confirmUnlink}
+        onCancel={() => {
+          if (!unlink.isPending) setTarget(null)
+        }}
+      />
+    </section>
   )
 }

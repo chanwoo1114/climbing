@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
 
-from accounts.models import User, UserProfile
+from accounts.models import SocialAccount, User, UserProfile
 
 
 @admin.register(User)
@@ -36,3 +36,14 @@ class UserProfileAdmin(admin.ModelAdmin):
     list_display = ("user", "home_gym", "created_at")
     search_fields = ("user__email", "user__nickname")
     raw_id_fields = ("user", "home_gym")
+
+
+@admin.register(SocialAccount)
+class SocialAccountAdmin(admin.ModelAdmin):
+    list_display = ("user", "provider", "provider_uid", "connected_at", "is_deleted")
+    list_filter = ("provider", "is_deleted")
+    search_fields = ("user__email", "user__nickname", "provider_uid")
+    raw_id_fields = ("user",)
+
+    def get_queryset(self, request):
+        return SocialAccount.all_objects.select_related("user")

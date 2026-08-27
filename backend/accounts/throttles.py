@@ -53,3 +53,9 @@ class TokenConfirmRateThrottle(AnonRateThrottle):
     """토큰 확인(이메일 인증·재설정 확정) — 토큰 추측 시도 방지."""
 
     scope = "token_confirm"
+
+
+class SocialLoginRateThrottle(AnonRateThrottle):
+    """카카오 콜백 — code 는 1회용이라 추측 대상은 아니지만 카카오 API 호출을 유발한다."""
+
+    scope = "social_login"

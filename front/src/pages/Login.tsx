@@ -4,7 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router'
 import { getErrorCode, getErrorMessage } from '@/api/client'
 import Button from '@/components/common/Button'
 import TextField from '@/components/common/TextField'
-import { useLogin, useResendVerification } from '@/hooks/useAuth'
+import { useKakaoStart, useLogin, useResendVerification } from '@/hooks/useAuth'
 import {
   checkEmail,
   EMAIL_MAX_LENGTH,
@@ -12,11 +12,18 @@ import {
   type FieldCheck,
 } from '@/lib/validation'
 
+/**
+ * 카카오 브랜드 색 — "index.css 토큰 외 hex 금지" 규칙의 유일한 예외.
+ * 제3자 브랜드 가이드(카카오 로그인 버튼: 배경 #FEE500, 글자 #191919)를 따라야 해서 팔레트로 옮기지 않는다.
+ */
+const KAKAO_BRAND = { background: '#FEE500', text: '#191919' } as const
+
 export default function Login() {
   const navigate = useNavigate()
   const location = useLocation()
   const login = useLogin()
   const resend = useResendVerification()
+  const kakao = useKakaoStart()
   // RequireAuth 가 보낸 경우 로그인 후 원래 경로로 돌아간다.
   const from = (location.state as { from?: string } | null)?.from ?? '/'
   const [email, setEmail] = useState('')
@@ -115,6 +122,30 @@ export default function Login() {
         <Button type="submit" full disabled={!canSubmit || login.isPending}>
           {login.isPending ? '로그인 중…' : '로그인'}
         </Button>
+
+        <div className="flex items-center gap-3 text-xs text-ink-400" aria-hidden="true">
+          <span className="h-px flex-1 bg-chalk-300" />
+          또는
+          <span className="h-px flex-1 bg-chalk-300" />
+        </div>
+
+        {/* 브랜드 색은 인라인 style — secondary 의 흰 배경·hover 를 덮는다. 주요 CTA(hold-500)는 로그인 버튼 하나뿐 */}
+        <Button
+          variant="secondary"
+          full
+          disabled={kakao.isPending}
+          onClick={() => kakao.mutate(from)}
+          className="border-transparent hover:opacity-90"
+          style={{ backgroundColor: KAKAO_BRAND.background, color: KAKAO_BRAND.text }}
+        >
+          <KakaoSymbol />
+          {kakao.isPending ? '카카오로 이동 중…' : '카카오로 로그인'}
+        </Button>
+        {kakao.isError && (
+          <p role="alert" className="rounded-xl bg-danger-100 px-3 py-2 text-sm text-danger-600">
+            {getErrorMessage(kakao.error, '카카오 로그인을 시작하지 못했어요. 잠시 후 다시 시도해 주세요.')}
+          </p>
+        )}
       </form>
       <div className="mt-4 space-y-1 text-center text-sm text-ink-400">
         <p>
@@ -130,5 +161,14 @@ export default function Login() {
         </p>
       </div>
     </div>
+  )
+}
+
+/** 카카오 말풍선 심볼 — 버튼 글자색(#191919)을 그대로 쓴다 */
+function KakaoSymbol() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor">
+      <path d="M12 3C6.48 3 2 6.53 2 10.9c0 2.8 1.83 5.26 4.6 6.66l-1.08 4.02a.3.3 0 0 0 .46.33l4.7-3.14c.43.05.87.08 1.32.08 5.52 0 10-3.53 10-7.95S17.52 3 12 3z" />
+    </svg>
   )
 }

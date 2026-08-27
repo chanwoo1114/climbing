@@ -1,6 +1,7 @@
 from django.contrib.auth.models import AbstractUser, BaseUserManager
 from django.db import models
 from django.db.models.functions import Lower
+from django.utils import timezone
 
 from common.managers import SoftDeleteQuerySet
 from common.models import BaseModel
@@ -115,13 +116,66 @@ class UserProfile(BaseModel):
         on_delete=models.SET_NULL,
         db_comment="주로 다니는 암장 FK",
     )
-    # TODO(M6): 대표 크루는 1개 (docs/개발정의.md 4장)
-    # main_crew = models.ForeignKey(
-    #     "crews.Crew", null=True, blank=True, on_delete=models.SET_NULL
-    # )
+    # 여러 크루에 가입할 수 있지만 프로필에 내세우는 대표 크루는 1개 (docs/개발정의.md 4장).
+    main_crew = models.ForeignKey(
+        "crews.Crew",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="main_profiles",
+        db_comment="대표 크루 FK (활동 중인 크루 중 1개). 탈퇴·강퇴·크루 삭제 시 NULL",
+    )
 
     class Meta:
         db_table_comment = "회원 프로필 — 소개글/이미지/홈짐. User와 1:1"
 
     def __str__(self):
         return f"{self.user.nickname} 프로필"
+
+
+class SocialAccount(BaseModel):
+    """소셜 로그인 연결 (카카오). 한 회원이 provider 별로 하나씩.
+
+    provider 의 access/refresh 토큰은 저장하지 않는다 (docs/개발정의.md 5장 5번).
+    로그인은 매번 인가 코드를 서버에서 교환해 프로필만 읽고 토큰은 버린다.
+    연결 해제는 soft delete — 같은 카카오 계정을 다시 연결하면 새 행이 생긴다.
+    """
+
+    class Provider(models.TextChoices):
+        KAKAO = "kakao", "카카오"
+
+    user = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="social_accounts",
+        db_comment="회원 FK",
+    )
+    provider = models.CharField(
+        max_length=20, choices=Provider.choices, db_comment="소셜 제공자 (kakao)"
+    )
+    provider_uid = models.CharField(
+        max_length=64, db_comment="제공자 쪽 사용자 ID (카카오 회원번호)"
+    )
+    email_at_provider = models.EmailField(
+        blank=True, db_comment="연결 당시 제공자에 등록된 이메일 (참고용)"
+    )
+    nickname_at_provider = models.CharField(
+        max_length=100, blank=True, db_comment="연결 당시 제공자 닉네임 (참고용)"
+    )
+    connected_at = models.DateTimeField(
+        default=timezone.now, db_comment="연결(최초 로그인) 시각"
+    )
+
+    class Meta:
+        db_table_comment = "소셜 로그인 연결 — provider 토큰은 저장하지 않는다"
+        constraints = [
+            # 살아 있는 연결 기준으로만 유일. 해제(soft delete)한 뒤 재연결을 허용한다.
+            models.UniqueConstraint(
+                fields=["provider", "provider_uid"],
+                condition=models.Q(is_deleted=False),
+                name="accounts_socialaccount_provider_uid_uniq",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.user.nickname} ↔ {self.get_provider_display()}"

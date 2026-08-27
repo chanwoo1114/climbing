@@ -10,7 +10,10 @@ from rest_framework_simplejwt.serializers import (
 from rest_framework_simplejwt.settings import api_settings as jwt_settings
 
 from accounts.exceptions import EmailNotVerified, UserInactive
-from accounts.models import User
+from accounts.models import SocialAccount, User
+from crews.models import Crew
+from crews.serializers import MainCrewField
+from crews.services import is_active_member
 from gyms.models import Gym
 
 # 입력 규칙 — 프론트(front/src/lib/validation.ts)와 동일하게 유지할 것.
@@ -156,6 +159,14 @@ class MeSerializer(serializers.ModelSerializer):
     home_gym_name = serializers.CharField(
         source="profile.home_gym.name", read_only=True, default=None
     )
+    # 대표 크루 — 쓰기는 pk(내가 활동 중인 크루만), 읽기는 {id, name}.
+    main_crew = MainCrewField(
+        source="profile.main_crew",
+        queryset=Crew.objects.all(),
+        allow_null=True,
+        required=False,
+        error_messages={"does_not_exist": "존재하지 않는 크루입니다."},
+    )
 
     class Meta:
         model = User
@@ -167,6 +178,7 @@ class MeSerializer(serializers.ModelSerializer):
             "image",
             "home_gym",
             "home_gym_name",
+            "main_crew",
             "email_verified_at",
             "created_at",
         )
@@ -178,6 +190,13 @@ class MeSerializer(serializers.ModelSerializer):
             "created_at",
         )
 
+    def validate_main_crew(self, crew):
+        if crew is not None and not is_active_member(crew, self.instance):
+            raise serializers.ValidationError(
+                "가입한 크루만 대표 크루로 설정할 수 있습니다."
+            )
+        return crew
+
     def update(self, instance, validated_data):
         profile_data = validated_data.pop("profile", {})
         instance = super().update(instance, validated_data)
@@ -186,6 +205,66 @@ class MeSerializer(serializers.ModelSerializer):
                 setattr(instance.profile, field, value)
             instance.profile.save(update_fields=[*profile_data, "updated_at"])
         return instance
+
+
+class PublicProfileSerializer(serializers.ModelSerializer):
+    """다른 회원이 보는 프로필 (GET users/{id}/). 이메일은 내려주지 않는다.
+
+    follower_count / following_count / is_following 은 뷰가
+    social.services.annotate_follow_stats 로 붙인 어노테이션을 그대로 읽는다.
+    """
+
+    bio = serializers.SerializerMethodField()
+    image = serializers.SerializerMethodField()
+    home_gym = serializers.SerializerMethodField()
+    main_crew = serializers.SerializerMethodField()
+    follower_count = serializers.IntegerField(read_only=True)
+    following_count = serializers.IntegerField(read_only=True)
+    is_following = serializers.BooleanField(read_only=True)
+    is_me = serializers.SerializerMethodField()
+
+    class Meta:
+        model = User
+        fields = (
+            "id",
+            "nickname",
+            "bio",
+            "image",
+            "home_gym",
+            "main_crew",
+            "follower_count",
+            "following_count",
+            "is_following",
+            "is_me",
+            "created_at",
+        )
+        read_only_fields = fields
+
+    def _profile(self, obj):
+        # createsuperuser·admin 으로 만든 계정은 프로필이 없을 수 있다.
+        return getattr(obj, "profile", None)
+
+    def get_bio(self, obj) -> str:
+        profile = self._profile(obj)
+        return profile.bio if profile else ""
+
+    def get_image(self, obj) -> str | None:
+        profile = self._profile(obj)
+        return (profile.image or None) if profile else None
+
+    def get_home_gym(self, obj) -> dict | None:
+        profile = self._profile(obj)
+        gym = profile.home_gym if profile else None
+        return {"id": gym.id, "name": gym.name} if gym else None
+
+    def get_main_crew(self, obj) -> dict | None:
+        profile = self._profile(obj)
+        crew = profile.main_crew if profile else None
+        return {"id": crew.id, "name": crew.name} if crew else None
+
+    def get_is_me(self, obj) -> bool:
+        request = self.context.get("request")
+        return bool(request and request.user.pk == obj.pk)
 
 
 class LogoutSerializer(serializers.Serializer):
@@ -274,3 +353,41 @@ class RefreshSerializer(TokenRefreshSerializer):
         if not User.objects.filter(pk=user_id, is_active=True).exists():
             raise UserInactive()
         return super().validate(attrs)
+
+
+# ---- 소셜 로그인 (accounts/social) ------------------------------------------
+
+
+class KakaoAuthorizeSerializer(serializers.Serializer):
+    """GET auth/kakao/authorize/ 응답 (스키마 문서용)."""
+
+    authorize_url = serializers.URLField(read_only=True)
+    state = serializers.CharField(read_only=True)
+
+
+class KakaoCallbackSerializer(serializers.Serializer):
+    """카카오가 redirect_uri 로 돌려준 ?code=&state= 를 그대로 넘긴다."""
+
+    code = serializers.CharField(
+        max_length=512, error_messages={"blank": "인가 코드가 없습니다."}
+    )
+    state = serializers.CharField(
+        max_length=512, error_messages={"blank": "state 가 없습니다."}
+    )
+
+
+class SocialTokenSerializer(serializers.Serializer):
+    """소셜 로그인 성공 응답. LoginView 의 토큰 쌍 + 신규 가입 여부."""
+
+    access = serializers.CharField(read_only=True)
+    refresh = serializers.CharField(read_only=True)
+    is_new = serializers.BooleanField(read_only=True)
+
+
+class SocialAccountSerializer(serializers.ModelSerializer):
+    """내가 연결한 소셜 계정 목록 항목. provider 토큰·uid 는 내려주지 않는다."""
+
+    class Meta:
+        model = SocialAccount
+        fields = ("provider", "connected_at", "email_at_provider")
+        read_only_fields = fields

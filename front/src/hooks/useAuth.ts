@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
 import * as authApi from '@/api/auth'
+import { safeReturnPath, saveKakaoRoundTrip } from '@/lib/kakaoLogin'
 import { getRefreshToken, useAuthStore } from '@/stores/authStore'
 
 export function useLogin() {
@@ -93,5 +94,60 @@ export function useConfirmPasswordReset() {
   return useMutation({
     mutationFn: (input: { uid: string; token: string; password: string }) =>
       authApi.confirmPasswordReset(input.uid, input.token, input.password),
+  })
+}
+
+// --- 소셜 로그인 (카카오) ---
+
+/**
+ * 카카오 로그인 시작: 인가 URL 을 받아 state 와 돌아갈 경로를 sessionStorage 에 맡기고 이동한다.
+ * 이동 뒤 SPA 가 통째로 사라지므로 mutation 은 pending 인 채로 끝난다 (버튼 로딩 표시용).
+ */
+export function useKakaoStart() {
+  return useMutation({
+    mutationFn: async (from: string) => {
+      const { authorizeUrl, state } = await authApi.fetchKakaoAuthorize()
+      saveKakaoRoundTrip({ state, from: safeReturnPath(from) })
+      window.location.assign(authorizeUrl)
+    },
+  })
+}
+
+/**
+ * 콜백의 code 를 우리 토큰으로 교환. useVerifyEmail 과 같은 이유로 mutation 이 아니라 query —
+ * StrictMode 리마운트에도 요청은 한 번만 나가고 결과가 캐시에 남는다.
+ * 인가 코드는 일회용이라 재시도해도 같은 실패가 돌아온다.
+ */
+export function useKakaoCallback(code: string, state: string) {
+  const setSession = useAuthStore((s) => s.setSession)
+  const queryClient = useQueryClient()
+  return useQuery({
+    queryKey: ['kakao-callback', code, state],
+    queryFn: async () => {
+      const tokens = await authApi.kakaoCallback(code, state)
+      setSession(tokens.access, tokens.refresh)
+      queryClient.invalidateQueries({ queryKey: ['me'] })
+      return tokens
+    },
+    enabled: !!code && !!state,
+    retry: false,
+    staleTime: Infinity,
+  })
+}
+
+export function useSocialAccounts() {
+  const accessToken = useAuthStore((s) => s.accessToken)
+  return useQuery({
+    queryKey: ['social-accounts'],
+    queryFn: authApi.fetchSocialAccounts,
+    enabled: !!accessToken,
+  })
+}
+
+export function useUnlinkSocial() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (provider: authApi.SocialProvider) => authApi.unlinkSocial(provider),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['social-accounts'] }),
   })
 }
