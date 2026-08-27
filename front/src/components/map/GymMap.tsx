@@ -1,8 +1,8 @@
-import maplibregl, { type LngLatBoundsLike } from 'maplibre-gl'
+import maplibregl, { type GeoJSONSource, type LngLatBoundsLike } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { useEffect, useRef } from 'react'
 
-import type { GymSummary } from '@/api/gyms'
+import type { GymPoint } from '@/api/gyms'
 
 export interface Viewport {
   lat: number
@@ -16,14 +16,15 @@ export interface ViewportBox extends Viewport {
 }
 
 interface Props {
-  gyms: GymSummary[]
+  /** 전국 좌표. MapLibre 가 줌에 따라 클러스터로 묶는다 */
+  points: GymPoint[]
   selectedId: number | null
   onSelect: (id: number | null) => void
   /** 최초 1회만 반영. 이후 이동은 flyTo 로 */
   initialViewport: Viewport
   /** 지도 이동이 멈춘 뒤(디바운스) 호출 */
   onViewportChange: (viewport: ViewportBox) => void
-  /** 파란 점으로 표시할 사용자 위치 */
+  /** 점으로 표시할 사용자 위치 */
   userLocation: { lat: number; lng: number } | null
   /** 바뀌면 그 위치로 이동한다 (카드 클릭·내 위치 버튼) */
   flyTo: { lat: number; lng: number; zoom?: number; key: number } | null
@@ -62,6 +63,9 @@ const KOREA_BOUNDS: LngLatBoundsLike = [
   [134, 40],
 ]
 
+const SOURCE_ID = 'gyms'
+/** 이 줌까지는 묶고, 그 위(동네 단위)부터는 낱개로 보여준다 */
+const CLUSTER_MAX_ZOOM = 13
 const MOVE_DEBOUNCE_MS = 300
 
 const reducedMotion = () =>
@@ -82,10 +86,25 @@ function readViewport(map: maplibregl.Map): ViewportBox {
   }
 }
 
-function markerElement(onClick: () => void) {
+function toFeatureCollection(points: GymPoint[]): GeoJSON.FeatureCollection<GeoJSON.Point> {
+  return {
+    type: 'FeatureCollection',
+    features: points.map((p) => ({
+      type: 'Feature',
+      id: p.id,
+      geometry: { type: 'Point', coordinates: [p.lng, p.lat] },
+      properties: { id: p.id, name: p.name },
+    })),
+  }
+}
+
+const count = new Intl.NumberFormat('ko-KR')
+
+function buttonElement(className: string, onClick: () => void) {
   const el = document.createElement('button')
   el.type = 'button'
-  el.className = 'gym-marker'
+  el.className = className
+  // 지도 자체의 click(선택 해제)까지 번지지 않게
   el.addEventListener('click', (e) => {
     e.stopPropagation()
     onClick()
@@ -93,8 +112,18 @@ function markerElement(onClick: () => void) {
   return el
 }
 
+function clusterElement(n: number, onClick: () => void) {
+  const size = n >= 50 ? ' is-lg' : n >= 10 ? ' is-md' : ''
+  const el = buttonElement(`gym-cluster${size}`, onClick)
+  el.textContent = count.format(n)
+  return el
+}
+
+type ClusterProps = { cluster: true; cluster_id: number; point_count: number }
+type PointProps = { cluster?: undefined; id: number; name: string }
+
 export default function GymMap({
-  gyms,
+  points,
   selectedId,
   onSelect,
   initialViewport,
@@ -105,8 +134,11 @@ export default function GymMap({
 }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const mapRef = useRef<maplibregl.Map | null>(null)
-  const markersRef = useRef(new Map<number, maplibregl.Marker>())
+  // key: 낱개는 `p{id}`, 클러스터는 `c{cluster_id}`
+  const markersRef = useRef(new Map<string, maplibregl.Marker>())
   const userMarkerRef = useRef<maplibregl.Marker | null>(null)
+  const pointsRef = useRef(points)
+  const selectedRef = useRef(selectedId)
   // 콜백은 ref 로 들고 있어 지도 인스턴스를 다시 만들지 않는다
   const onViewportChangeRef = useRef(onViewportChange)
   const onSelectRef = useRef(onSelect)
@@ -132,19 +164,97 @@ export default function GymMap({
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right')
     map.on('click', () => onSelectRef.current(null))
 
+    const markers = markersRef.current
+
+    const applySelection = () => {
+      markers.forEach((marker, key) => {
+        if (!key.startsWith('p')) return
+        const selected = key === `p${selectedRef.current}`
+        marker.getElement().classList.toggle('is-selected', selected)
+        marker.getElement().setAttribute('aria-pressed', String(selected))
+      })
+    }
+
+    const expandCluster = async (clusterId: number, center: [number, number]) => {
+      const source = map.getSource(SOURCE_ID) as GeoJSONSource | undefined
+      if (!source) return
+      const zoom = await source.getClusterExpansionZoom(clusterId)
+      const target = { center, zoom: Math.min(zoom, 18) }
+      if (reducedMotion()) map.jumpTo(target)
+      else map.easeTo({ ...target, duration: 400 })
+    }
+
+    // 화면에 보이는 클러스터/낱개를 DOM 마커로 맞춘다 (MapLibre 공식 HTML 클러스터 패턴).
+    // 레이어 대신 DOM 을 쓰는 이유: 글리프 폰트 없이 숫자를 찍고, 기존 마커 CSS·aria 를 재사용.
+    const syncMarkers = () => {
+      if (!map.getSource(SOURCE_ID)) return
+      const seen = new Set<string>()
+      for (const feature of map.querySourceFeatures(SOURCE_ID)) {
+        const props = feature.properties as ClusterProps | PointProps
+        const coords = (feature.geometry as GeoJSON.Point).coordinates as [number, number]
+        const key = props.cluster ? `c${props.cluster_id}` : `p${props.id}`
+        if (seen.has(key)) continue // 타일 경계에 걸친 피처는 중복으로 온다
+        seen.add(key)
+        if (markers.has(key)) continue
+        const element = props.cluster
+          ? clusterElement(props.point_count, () => expandCluster(props.cluster_id, coords))
+          : buttonElement('gym-marker', () => onSelectRef.current(props.id))
+        const marker = new maplibregl.Marker({ element, anchor: 'center' })
+          .setLngLat(coords)
+          .addTo(map)
+        // addTo 가 aria-label 을 "Map marker" 로 덮어쓰므로 그 뒤에 설정한다
+        marker
+          .getElement()
+          .setAttribute(
+            'aria-label',
+            props.cluster ? `암장 ${count.format(props.point_count)}곳 — 확대해서 보기` : props.name,
+          )
+        markers.set(key, marker)
+      }
+      markers.forEach((marker, key) => {
+        if (!seen.has(key)) {
+          marker.remove()
+          markers.delete(key)
+        }
+      })
+      applySelection()
+    }
+
     let timer: ReturnType<typeof setTimeout> | undefined
     const emit = () => onViewportChangeRef.current(readViewport(map))
     map.on('moveend', () => {
       clearTimeout(timer)
       timer = setTimeout(emit, MOVE_DEBOUNCE_MS)
     })
-    map.once('load', emit)
+
+    map.once('load', () => {
+      map.addSource(SOURCE_ID, {
+        type: 'geojson',
+        data: toFeatureCollection(pointsRef.current),
+        cluster: true,
+        clusterRadius: 50,
+        clusterMaxZoom: CLUSTER_MAX_ZOOM,
+      })
+      // 소스는 레이어가 하나라도 써야 타일이 로드된다 — 그리지는 않는다
+      map.addLayer({
+        id: 'gyms-anchor',
+        type: 'circle',
+        source: SOURCE_ID,
+        paint: { 'circle-radius': 0, 'circle-opacity': 0 },
+      })
+      map.on('sourcedata', (e) => {
+        if (e.sourceId === SOURCE_ID && e.isSourceLoaded) syncMarkers()
+      })
+      map.on('move', syncMarkers)
+      map.on('moveend', syncMarkers)
+      emit()
+    })
 
     mapRef.current = map
     return () => {
       clearTimeout(timer)
-      markersRef.current.forEach((m) => m.remove())
-      markersRef.current.clear()
+      markers.forEach((m) => m.remove())
+      markers.clear()
       userMarkerRef.current = null
       map.remove()
       mapRef.current = null
@@ -153,40 +263,23 @@ export default function GymMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // 마커 동기화 — 들어온 것만 추가, 빠진 것만 제거
+  // 좌표 데이터 갱신
   useEffect(() => {
-    const map = mapRef.current
-    if (!map) return
-    const markers = markersRef.current
-    const next = new Set(gyms.map((g) => g.id))
-    markers.forEach((marker, id) => {
-      if (!next.has(id)) {
-        marker.remove()
-        markers.delete(id)
-      }
-    })
-    gyms.forEach((gym) => {
-      if (markers.has(gym.id)) return
-      const marker = new maplibregl.Marker({
-        element: markerElement(() => onSelectRef.current(gym.id)),
-        anchor: 'center',
-      })
-        .setLngLat([gym.lng, gym.lat])
-        .addTo(map)
-      // addTo 가 aria-label 을 "Map marker" 로 덮어쓰므로 그 뒤에 상호명으로 되돌린다
-      marker.getElement().setAttribute('aria-label', gym.name)
-      markers.set(gym.id, marker)
-    })
-  }, [gyms])
+    pointsRef.current = points
+    const source = mapRef.current?.getSource(SOURCE_ID) as GeoJSONSource | undefined
+    source?.setData(toFeatureCollection(points))
+  }, [points])
 
   // 선택 상태 표시
   useEffect(() => {
-    markersRef.current.forEach((marker, id) => {
-      const selected = id === selectedId
+    selectedRef.current = selectedId
+    markersRef.current.forEach((marker, key) => {
+      if (!key.startsWith('p')) return
+      const selected = key === `p${selectedId}`
       marker.getElement().classList.toggle('is-selected', selected)
       marker.getElement().setAttribute('aria-pressed', String(selected))
     })
-  }, [selectedId, gyms])
+  }, [selectedId])
 
   // 사용자 위치 점
   useEffect(() => {
@@ -214,7 +307,8 @@ export default function GymMap({
     if (!map || !flyTo) return
     const target = {
       center: [flyTo.lng, flyTo.lat] as [number, number],
-      zoom: flyTo.zoom ?? Math.max(map.getZoom(), 14),
+      // 낱개 마커가 보이는 줌까지는 들어간다 — 카드로 고른 암장이 클러스터에 묻히지 않게
+      zoom: flyTo.zoom ?? Math.max(map.getZoom(), CLUSTER_MAX_ZOOM + 1),
     }
     if (reducedMotion()) map.jumpTo(target)
     else map.flyTo({ ...target, duration: 600, essential: true })

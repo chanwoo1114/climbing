@@ -5,10 +5,12 @@ import type { GymSummary } from '@/api/gyms'
 import Button from '@/components/common/Button'
 import GymMap, { type Viewport, type ViewportBox } from '@/components/map/GymMap'
 import { useGeolocation } from '@/hooks/useGeolocation'
-import { useGyms } from '@/hooks/useGyms'
+import { useGymPoints, useGyms } from '@/hooks/useGyms'
 
-// 서울시청 — 위치 권한이 없을 때의 기본 시작점
-const DEFAULT_VIEWPORT: Viewport = { lat: 37.5663, lng: 126.9779, zoom: 12 }
+// 서울시청 — 위치 권한이 없을 때의 기본 시작점. 동네 단위(14)로 시작하고,
+// 축소하면 GymMap 이 클러스터로 묶어 보여준다.
+const DEFAULT_VIEWPORT: Viewport = { lat: 37.5663, lng: 126.9779, zoom: 14 }
+const LOCAL_ZOOM = 14
 /** 백엔드 GymListView.MAX_MAP_RESULTS 와 같다 — 꽉 차면 "더 있을 수 있음" 안내 */
 const MAX_RESULTS = 100
 
@@ -62,6 +64,8 @@ export default function MapHome() {
   )
   const { data, isPending, isError, isFetching } = useGyms(params, viewport !== null)
   const gyms = data ?? []
+  // 마커는 목록(100건 상한)이 아니라 전국 좌표로 찍는다 — 축소해도 빠지는 곳이 없게
+  const points = useGymPoints()
 
   // 위치를 받으면 그리로 이동한다. 단, URL 로 특정 지점에 들어왔고 사용자가 직접
   // 누른 게 아니면(권한이 이미 있어 자동으로 읽힌 경우) 그 지점을 유지한다.
@@ -72,12 +76,12 @@ export default function MapHome() {
     const first = prevPosition.current === null
     prevPosition.current = geo.position
     if (first && startedFromUrl.current && !userRequested.current) return
-    setFlyTo({ ...geo.position, zoom: first && !userRequested.current ? 13 : 14, key: Date.now() })
+    setFlyTo({ ...geo.position, zoom: LOCAL_ZOOM, key: Date.now() })
   }, [geo.position])
 
   const goToMyLocation = () => {
     userRequested.current = true
-    if (geo.position) setFlyTo({ ...geo.position, zoom: 14, key: Date.now() })
+    if (geo.position) setFlyTo({ ...geo.position, zoom: LOCAL_ZOOM, key: Date.now() })
     else geo.locate()
   }
 
@@ -100,7 +104,7 @@ export default function MapHome() {
       <div className="relative">
         <GymMap
           className="h-[48vh] min-h-72 md:h-[calc(100vh-8rem)]"
-          gyms={gyms}
+          points={points.data ?? []}
           selectedId={selectedId}
           onSelect={setSelectedId}
           initialViewport={initialViewport}

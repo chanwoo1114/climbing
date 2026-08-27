@@ -27,6 +27,14 @@ export interface GymDetail extends Omit<GymSummary, 'distanceM' | 'thumbnail'> {
   difficulties: GymDifficulty[]
 }
 
+/** 지도 클러스터용 최소 필드 — 전국을 한 번에 받는다 */
+export interface GymPoint {
+  id: number
+  name: string
+  lat: number
+  lng: number
+}
+
 export interface GymListParams {
   bbox?: string // minLng,minLat,maxLng,maxLat
   lat?: number
@@ -41,5 +49,10 @@ export async function fetchGyms(params: GymListParams = {}): Promise<GymSummary[
 
 export async function fetchGym(id: number): Promise<GymDetail> {
   const { data } = await api.get<GymDetail>(`/gyms/${id}/`)
+  return data
+}
+
+export async function fetchGymPoints(): Promise<GymPoint[]> {
+  const { data } = await api.get<GymPoint[]>('/gyms/points/')
   return data
 }

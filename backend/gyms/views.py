@@ -10,6 +10,7 @@ from gyms.serializers import (
     GymDetailSerializer,
     GymDifficultySerializer,
     GymListSerializer,
+    GymPointSerializer,
     GymReviewSerializer,
 )
 
@@ -75,6 +76,20 @@ class GymListView(generics.ListAPIView):
             queryset = queryset.order_by("-created_at")
 
         return queryset[:MAX_MAP_RESULTS]
+
+
+@extend_schema(tags=["gyms"])
+class GymPointListView(generics.ListAPIView):
+    """지도 클러스터용 전국 암장 좌표. 목록 API 의 100건 상한과 달리 전부 내려준다.
+
+    축소된 지도에서 bbox 목록만으로 마커를 찍으면 일부만 보여 "여긴 암장이 없네"로
+    오해한다. 클라이언트가 이걸 한 번 받아 캐시하고 MapLibre 가 클러스터링한다.
+    """
+
+    serializer_class = GymPointSerializer
+    permission_classes = [AllowAny]
+    pagination_class = None
+    queryset = Gym.objects.only("id", "name", "location").order_by("id")
 
 
 @extend_schema(tags=["gyms"])

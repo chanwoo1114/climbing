@@ -28,6 +28,17 @@ class GymFacilitySerializer(serializers.ModelSerializer):
         fields = ("id", "name")
 
 
+class GymPointSerializer(serializers.ModelSerializer):
+    """지도 마커/클러스터용 최소 필드. 전국을 한 번에 내려준다."""
+
+    lat = serializers.FloatField(source="location.y", read_only=True)
+    lng = serializers.FloatField(source="location.x", read_only=True)
+
+    class Meta:
+        model = Gym
+        fields = ("id", "name", "lat", "lng")
+
+
 class GymListSerializer(serializers.ModelSerializer):
     lat = serializers.FloatField(source="location.y", read_only=True)
     lng = serializers.FloatField(source="location.x", read_only=True)
