@@ -93,7 +93,12 @@ DATABASES = {
         "HOST": env("POSTGRES_HOST", default="db"),
         "PORT": env.int("POSTGRES_PORT", default=5432),
         "CONN_MAX_AGE": 60,
-        "TEST": {"TEMPLATE": "template_postgis"},
+        # TEST_DB_NAME: 테스트를 동시에 여러 개 돌릴 때(에이전트 병렬 작업 등) 이름 충돌 방지.
+        #   dc exec -e TEST_DB_NAME=test_climbing_x web python manage.py test <app>
+        "TEST": {
+            "TEMPLATE": "template_postgis",
+            "NAME": env("TEST_DB_NAME", default=None),
+        },
     }
 }
 
