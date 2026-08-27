@@ -1,7 +1,9 @@
-from django.urls import path  # noqa: F401
+from django.urls import path
+
+from common.views import PresignedUrlView
 
 app_name = "common"
 
 urlpatterns = [
-    # TODO(M2): path("uploads/presigned-url/", PresignedUrlView.as_view())
+    path("uploads/presigned-url/", PresignedUrlView.as_view(), name="presigned-url"),
 ]

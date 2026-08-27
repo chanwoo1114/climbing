@@ -1,4 +1,4 @@
-from django.db import models
+from django.db import models, transaction
 from django.db.models.base import ModelBase
 from django.utils import timezone
 
@@ -54,9 +54,29 @@ class BaseModel(models.Model, metaclass=AuditFieldsLastMeta):
         abstract = True
 
     def delete(self, using=None, keep_parents=False):
-        self.is_deleted = True
-        self.deleted_at = timezone.now()
-        self.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
+        """soft delete + cascade.
+
+        on_delete=CASCADE 로 이 행을 가리키는 BaseModel 자식(댓글·좋아요·프로필 등)도
+        같은 시각으로 함께 soft delete 한다(재귀). PROTECT/SET_NULL 관계와 BaseModel 이
+        아닌 모델(토큰 블랙리스트 등)은 건드리지 않는다. 쿼리셋 delete() 는 bulk update 라
+        cascade 하지 않으니, 자식이 있는 모델은 인스턴스 delete() 를 쓸 것.
+        """
+        with transaction.atomic():
+            self._soft_delete_cascade(timezone.now())
+
+    def _soft_delete_cascade(self, now):
+        for rel in self._meta.related_objects:
+            related = rel.related_model
+            if rel.on_delete is not models.CASCADE or not issubclass(
+                related, BaseModel
+            ):
+                continue
+            for child in related.objects.filter(**{rel.field.name: self}):
+                child._soft_delete_cascade(now)
+        if not self.is_deleted:
+            self.is_deleted = True
+            self.deleted_at = now
+            self.save(update_fields=["is_deleted", "deleted_at", "updated_at"])
 
     def hard_delete(self, using=None, keep_parents=False):
         return super().delete(using=using, keep_parents=keep_parents)
