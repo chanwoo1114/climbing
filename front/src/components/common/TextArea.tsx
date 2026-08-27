@@ -1,12 +1,16 @@
-import type { TextareaHTMLAttributes } from 'react'
+import type { Ref, TextareaHTMLAttributes } from 'react'
 
 import type { FieldCheck } from '@/lib/validation'
 
 interface Props extends TextareaHTMLAttributes<HTMLTextAreaElement> {
   label: string
+  /** 라벨을 화면에서 숨긴다 (스크린리더에는 남는다) — 채팅 입력칸처럼 맥락이 분명할 때 */
+  hideLabel?: boolean
   check?: FieldCheck
   /** 현재 글자 수 / 최대 글자 수를 오른쪽 아래에 표시한다 (maxLength 필요) */
   showCount?: boolean
+  /** 자동 높이 조절 등 DOM 접근이 필요할 때 */
+  ref?: Ref<HTMLTextAreaElement>
 }
 
 // TextField 와 같은 보더 규칙 — 포커스는 outline 대신 보더색으로 표시
@@ -24,11 +28,13 @@ const MESSAGE = {
 
 export default function TextArea({
   label,
+  hideLabel = false,
   id,
   check,
   showCount = false,
   maxLength,
   value,
+  className = '',
   ...rest
 }: Props) {
   const inputId = id ?? rest.name
@@ -40,14 +46,18 @@ export default function TextArea({
   return (
     <div>
       <label htmlFor={inputId} className="block">
-        <span className="mb-1 block text-sm font-medium text-ink-500">{label}</span>
+        <span
+          className={hideLabel ? 'sr-only' : 'mb-1 block text-sm font-medium text-ink-500'}
+        >
+          {label}
+        </span>
         <textarea
           id={inputId}
           maxLength={maxLength}
           value={value}
           aria-invalid={state === 'invalid'}
           aria-describedby={hasMessage ? messageId : undefined}
-          className={`min-h-28 w-full resize-y rounded-xl border bg-white px-3 py-2.5 text-ink-700 transition-colors duration-150 placeholder:text-ink-300 focus:outline-none ${BORDER[state]}`}
+          className={`min-h-28 w-full resize-y rounded-xl border bg-white px-3 py-2.5 text-ink-700 transition-colors duration-150 placeholder:text-ink-300 focus:outline-none ${BORDER[state]} ${className}`}
           {...rest}
         />
       </label>

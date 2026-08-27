@@ -1,6 +1,8 @@
-from django.urls import re_path  # noqa: F401
+from django.urls import re_path
 
-# ws/chat/{room_id}/ — docs/개발정의.md 6장
+from chat.consumers import ChatConsumer
+
+# ws/chat/{room_id}/?token=<access JWT> — docs/개발정의.md 6장
 websocket_urlpatterns = [
-    # TODO(M4): re_path(r"^ws/chat/(?P<room_id>\d+)/$", ChatConsumer.as_asgi()),
+    re_path(r"^ws/chat/(?P<room_id>\d+)/$", ChatConsumer.as_asgi()),
 ]
