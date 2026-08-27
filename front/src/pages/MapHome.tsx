@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router'
+import { Link, useSearchParams } from 'react-router'
 
 import type { GymSummary } from '@/api/gyms'
 import Button from '@/components/common/Button'
@@ -182,26 +182,37 @@ export default function MapHome() {
                   else itemRefs.current.delete(gym.id)
                 }}
               >
-                {/* 선택형 카드 — 공통 Button 의 CTA 스타일과 달라 직접 만든다 (aria-pressed 로 상태 노출) */}
-                <button
-                  type="button"
-                  aria-pressed={selected}
-                  onClick={() => selectFromList(gym)}
-                  className={`block w-full rounded-card border bg-white p-4 text-left transition-colors duration-150 hover:border-chalk-400 ${
+                {/* 카드 안에 두 가지 동작이 있다 — 상호명 링크는 상세로, 나머지 영역(버튼)은 지도에서 선택.
+                    버튼 안에 링크를 넣으면 잘못된 HTML 이라 형제로 나눈다. 선택 상태는 aria-pressed 로 노출 */}
+                <article
+                  className={`rounded-card border bg-white transition-colors duration-150 hover:border-chalk-400 ${
                     selected ? 'border-hold-500' : 'border-chalk-300'
                   }`}
                 >
-                  <div className="flex items-baseline justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2 px-4">
                     {/* 긴 상호명은 잘라내고, 거리는 자릿수가 바뀌어도 폭이 흔들리지 않게 */}
-                    <span className="min-w-0 truncate font-medium text-ink-700">{gym.name}</span>
+                    <Link
+                      to={`/gyms/${gym.id}`}
+                      className="inline-flex min-h-11 min-w-0 items-center font-medium text-ink-700 hover:underline"
+                    >
+                      <span className="truncate">{gym.name}</span>
+                    </Link>
                     {gym.distanceM !== null && (
                       <span className="shrink-0 text-xs text-slate-500 tabular-nums">
                         {formatDistance(gym.distanceM)}
                       </span>
                     )}
                   </div>
-                  <p className="mt-1 text-sm text-pretty break-words text-ink-400">{gym.address}</p>
-                </button>
+                  <button
+                    type="button"
+                    aria-pressed={selected}
+                    onClick={() => selectFromList(gym)}
+                    className="block min-h-11 w-full px-4 pb-3 text-left text-sm text-pretty break-words text-ink-400"
+                  >
+                    <span className="sr-only">지도에서 위치 보기: </span>
+                    {gym.address}
+                  </button>
+                </article>
               </li>
             )
           })}

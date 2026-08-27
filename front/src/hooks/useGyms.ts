@@ -1,6 +1,20 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 
-import { fetchGym, fetchGymPoints, fetchGyms, type GymListParams } from '@/api/gyms'
+import {
+  createGymReview,
+  fetchGym,
+  fetchGymPoints,
+  fetchGymReviews,
+  fetchGyms,
+  type GymListParams,
+  type GymReviewInput,
+} from '@/api/gyms'
 
 export function useGyms(params: GymListParams = {}, enabled = true) {
   return useQuery({
@@ -26,5 +40,31 @@ export function useGymPoints() {
     queryKey: ['gyms', 'points'],
     queryFn: fetchGymPoints,
     staleTime: 60 * 60 * 1000,
+  })
+}
+
+// --- 리뷰 ---
+
+const reviewsKey = (gymId: number) => ['gyms', gymId, 'reviews'] as const
+
+/** 커서 페이지네이션 — "더 보기"가 fetchNextPage() 를 부른다 */
+export function useGymReviews(gymId: number) {
+  return useInfiniteQuery({
+    queryKey: reviewsKey(gymId),
+    queryFn: ({ pageParam }) => fetchGymReviews(gymId, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.nextCursor ?? undefined,
+    enabled: Number.isFinite(gymId),
+  })
+}
+
+export function useCreateGymReview(gymId: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: GymReviewInput) => createGymReview(gymId, input),
+    // 새 리뷰는 -created_at 정렬의 맨 앞이라 첫 페이지부터 다시 받는다
+    // 목록과 함께 상세(review_count·rating_avg 집계)도 다시 받는다.
+    // ['gyms', gymId] 는 상세 키이자 리뷰 키의 접두사라 한 번에 둘 다 무효화된다.
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['gyms', gymId] }),
   })
 }

@@ -1,4 +1,5 @@
 from django.contrib.gis.db.models.functions import Distance
+from django.db.models import Avg, Count, Q
 from django.contrib.gis.geos import Point, Polygon
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics
@@ -98,6 +99,10 @@ class GymDetailView(generics.RetrieveAPIView):
 
     queryset = Gym.objects.prefetch_related(
         "images", "prices", "facilities", "difficulties"
+    ).annotate(
+        # 삭제된 리뷰는 집계에서 뺀다 (related manager 는 all_objects 기준으로 조인됨)
+        review_count=Count("reviews", filter=Q(reviews__is_deleted=False)),
+        rating_avg=Avg("reviews__rating", filter=Q(reviews__is_deleted=False)),
     )
     serializer_class = GymDetailSerializer
     permission_classes = [AllowAny]
@@ -107,6 +112,7 @@ class GymDetailView(generics.RetrieveAPIView):
 class GymDifficultyListView(generics.ListAPIView):
     """암장 난이도 목록. 공개."""
 
+    queryset = GymDifficulty.objects.none()  # 스키마 생성용 — 실제 조회는 get_queryset
     serializer_class = GymDifficultySerializer
     permission_classes = [AllowAny]
     pagination_class = None
@@ -119,6 +125,7 @@ class GymDifficultyListView(generics.ListAPIView):
 class GymReviewListCreateView(generics.ListCreateAPIView):
     """암장 리뷰 — 조회는 공개, 작성은 로그인 필요."""
 
+    queryset = GymReview.objects.none()  # 스키마 생성용 — 실제 조회는 get_queryset
     serializer_class = GymReviewSerializer
     permission_classes = [IsAuthenticatedOrReadOnly]
 

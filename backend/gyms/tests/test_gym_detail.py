@@ -31,3 +31,34 @@ class GymDetailTests(APITestCase):
     def test_missing_gym_returns_404(self):
         response = self.client.get(reverse("v1:gyms:detail", args=[99999]))
         self.assertEqual(response.status_code, 404)
+
+
+class GymDetailReviewStatsTests(APITestCase):
+    def setUp(self):
+        from accounts.tests.helpers import create_verified_user
+        from gyms.models import GymReview
+
+        self.gym = Gym.objects.create(
+            name="통계암장", address="서울", location=Point(127.0, 37.5, srid=4326)
+        )
+        u1 = create_verified_user(email="a@example.com", nickname="a1")
+        u2 = create_verified_user(email="b@example.com", nickname="b2")
+        GymReview.objects.create(gym=self.gym, user=u1, rating=5, content="좋아요")
+        GymReview.objects.create(gym=self.gym, user=u2, rating=3, content="보통")
+        deleted = GymReview.objects.create(gym=self.gym, user=u2, rating=1, content="x")
+        deleted.delete()  # soft delete → 집계 제외
+
+    def test_detail_has_review_stats(self):
+        data = self.client.get(reverse("v1:gyms:detail", args=[self.gym.id])).json()[
+            "data"
+        ]
+        self.assertEqual(data["review_count"], 2)
+        self.assertAlmostEqual(data["rating_avg"], 4.0)
+
+    def test_detail_without_reviews(self):
+        gym = Gym.objects.create(
+            name="빈암장", address="서울", location=Point(127.0, 37.5, srid=4326)
+        )
+        data = self.client.get(reverse("v1:gyms:detail", args=[gym.id])).json()["data"]
+        self.assertEqual(data["review_count"], 0)
+        self.assertIsNone(data["rating_avg"])
