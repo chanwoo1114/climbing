@@ -49,9 +49,20 @@ export function useLogout() {
 
 // --- 이메일 인증 ---
 
-export function useVerifyEmail() {
-  return useMutation({
-    mutationFn: (token: string) => authApi.verifyEmail(token),
+/**
+ * 링크의 토큰으로 인증. mutation 이 아니라 query 인 이유:
+ * StrictMode(dev)가 마운트 직후 컴포넌트를 가짜로 언마운트/리마운트하는데, 그 사이에
+ * useEffect 에서 부른 mutate() 의 관찰자가 떨어져 나가 결과가 화면에 반영되지 않는다
+ * ("인증 확인 중…" 에서 멈춤). query 는 결과가 캐시에 남아 리마운트에도 안전하고,
+ * 같은 토큰으로 두 번 마운트돼도 요청은 한 번만 나간다.
+ */
+export function useVerifyEmail(token: string) {
+  return useQuery({
+    queryKey: ['verify-email', token],
+    queryFn: () => authApi.verifyEmail(token),
+    enabled: !!token,
+    retry: false, // 위조·만료 토큰은 재시도해도 같다
+    staleTime: Infinity,
   })
 }
 

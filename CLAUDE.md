@@ -102,6 +102,8 @@ celery=watchmedo 재시작, front=vite HMR). 재빌드가 필요한 건 의존�
 - 토큰: access는 메모리(store), refresh는 별도 저장 전략 — 변경 시 `authStore` 주석 참고
 - 스타일은 Tailwind 유틸리티 클래스, 공통 컴포넌트는 `components/common/`
 - WebSocket은 `useChatSocket` 훅으로만 접근
+- "페이지 열리면 바로 서버 호출"(링크 토큰 검증 등)은 `useEffect`+`mutate()`가 아니라 `useQuery`로.
+  StrictMode(dev) 가짜 리마운트 때 mutation 관찰자가 떨어져 결과가 화면에 안 반영된다 (VerifyEmail 사례)
 
 ### 디자인 시스템 (Chalk & Hold)
 - 팔레트는 index.css의 @theme 토큰만 사용, 임의 hex 금지

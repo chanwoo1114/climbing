@@ -1,4 +1,3 @@
-import { useEffect, useRef } from 'react'
 import { Link, useSearchParams } from 'react-router'
 
 import { getErrorMessage } from '@/api/client'
@@ -8,15 +7,8 @@ import { useVerifyEmail } from '@/hooks/useAuth'
 export default function VerifyEmail() {
   const [params] = useSearchParams()
   const token = params.get('token') ?? ''
-  const verify = useVerifyEmail()
-  // StrictMode 의 이중 effect 실행으로 두 번 호출되지 않게 막는다.
-  const fired = useRef(false)
-
-  useEffect(() => {
-    if (!token || fired.current) return
-    fired.current = true
-    verify.mutate(token)
-  }, [token, verify])
+  // 페이지가 열리면 바로 토큰을 검증한다 (query 라 StrictMode 리마운트에도 안전)
+  const verify = useVerifyEmail(token)
 
   let body
   if (!token) {
