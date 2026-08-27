@@ -6,10 +6,17 @@
 ## 저장소 구조
 
 ```
-backend/   Django 5.x + DRF        (accounts, gyms, climbs, social, community, crews, chat, analysis)
+backend/   Django 5.x + DRF        (accounts, gyms, climbs, social, community, crews, chat,
+                                   analysis, notifications — 전부 구현됨, 2026-08-27 기준)
 front/     React 19 + TS + Vite    (SPA, React Router v7 라이브러리 모드 — SSR 사용 안 함)
 docs/      개발정의.md (개발 정의서 v3 — 마일스톤/모델/API 초안)
 ```
+
+앱별 핵심: accounts(JWT·이메일 인증·카카오 로그인 `accounts/social/`·공개 프로필·검색),
+gyms(지도 bbox 검색·`points/` 클러스터용·리뷰), climbs(기록·좋아요·댓글·피드·`users/{id}/logs`),
+social(팔로우), community(게시판·모집·참여 — 마감 시 chat 그룹방 자동 생성), crews(크루·멤버·크루 채팅방·크루 피드),
+chat(REST + WebSocket `ws/chat/{room}/`, JWT 는 `?token=`), analysis(Celery + MediaPipe 자세 분석),
+notifications(훅 기반 알림 + `ws/notifications/`). 파일 업로드는 `common` 의 presigned PUT.
 
 공용 코드는 `backend/common/` (BaseModel, 소프트삭제 매니저, 응답 래퍼 렌더러,
 커서 페이지네이션, 예외 핸들러). 도메인 앱은 이걸 상속/재사용한다.
@@ -46,7 +53,9 @@ dc exec web python manage.py test accounts    # 앱 단위 테스트
 dc exec web python manage.py spectacular --file schema.yml
 dc exec web sh -c "black . && flake8"         # 포맷 + 린트
 dc exec web python manage.py verify_email a@b.com   # 개발용: 메일 없이 이메일 인증 처리
+dc exec web python manage.py import_gyms_kakao      # Kakao Local API 로 전국 암장 적재 (KAKAO_REST_API_KEY)
 dc restart celery                             # tasks.py 추가/변경 후 (아래 주의 참고)
+dc exec -e TEST_DB_NAME=test_climbing_x web python manage.py test <app>   # 테스트 동시 실행 시 DB 이름 분리
 
 # Frontend
 cd front
@@ -58,6 +67,11 @@ npm test             # vitest (lib/validation 등 순수 로직)
 
 소스는 볼륨 마운트되어 있어 코드 수정이 즉시 반영된다 (web=runserver 자동 리로드,
 celery=watchmedo 재시작, front=vite HMR). 재빌드가 필요한 건 의존성 변경 시뿐이다.
+`.env` 값을 바꾸면 `dc up -d web` 으로 컨테이너를 재생성해야 반영된다 (env_file 은 생성 시점에만 읽힘).
+모듈을 패키지로 바꾸는 식의 구조 변경(예: `common/services.py` → `common/services/`)은 runserver 리로드로
+안 풀리니 `dc restart web`.
+LAN IP 나 공인 IP 로 접속하면 WebSocket 이 `AllowedHostsOriginValidator` 에 막힌다 → 그 호스트를
+`DJANGO_ALLOWED_HOSTS` 에 넣을 것. 카카오 로그인 왕복은 `KAKAO_REDIRECT_URI` 와 카카오 콘솔 등록값이 같아야 한다.
 주의: Windows 바인드 마운트에서는 watchmedo 파일 감지가 동작하지 않아 celery 는
 자동 재시작되지 않는다. 새 태스크를 만들거나 tasks.py 를 고치면 `dc restart celery`.
 개발 기본 EMAIL_BACKEND 는 콘솔이라 인증/재설정 메일 본문(링크)은 `dc logs celery` 에 찍힌다.
@@ -148,6 +162,15 @@ celery=watchmedo 재시작, front=vite HMR). 재빌드가 필요한 건 의존�
 
 ## 작업 흐름
 
-- 마일스톤 순서는 `docs/개발정의.md`의 M1→M7. 현재 진행 단계 확인 후 작업
+- 마일스톤 순서는 `docs/개발정의.md`의 M1→M7. 백엔드는 M1~M7 전부 구현됨(2026-08-27). 남은 큰 항목은
+  배포(prod compose 없음), 통계/랭킹(M8), 푸시/이메일 알림 fan-out(placeholder)
+- 에이전트 병렬 개발 시: 앱(디렉토리) 단위로 범위를 나누고, 공유 파일(`routes.tsx`, `RootLayout.tsx`,
+  `accounts/serializers.py`)은 additive Edit 만. 새 파일은 Write 한 번에 (Vite 가 빈 모듈을 캐시함 → `touch` 로 복구)
 - 마이그레이션 파일은 임의 수정 금지, 모델 변경 시 새로 생성
 - 커밋 전 `black . && flake8` (backend), `npm run typecheck` (front) 통과 확인
+- 커밋은 사용자가 명시적으로 요청할 때만. 작업이 끝나도 워킹트리에 둔다
+- 화면 확인은 Claude in Chrome 확장으로 하되, 탭을 열기 전에 **매번 사용자 허락**을 받고
+  `list_connected_browsers`로 연결된 브라우저를 보여준 뒤 사용자가 고른 곳에서만 연다 —
+  같은 계정의 **다른 PC** Chrome에 탭이 열린 사례 있음(2026-08-27). localhost가 안 열리고
+  LAN IP만 열리면 다른 기기일 가능성을 의심할 것
+- 테스트를 동시에 여러 개 돌릴 때(에이전트 병렬 작업)는 `-e TEST_DB_NAME=test_climbing_x` 로 테스트 DB 이름을 분리

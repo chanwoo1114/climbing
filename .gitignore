@@ -26,3 +26,6 @@ dist/
 
 # 개인용 Claude 스킬 — 팀 공유 안 함
 .claude/skills/
+
+# vite dev 로그 (창 없이 실행할 때)
+front/.vite-dev.log
