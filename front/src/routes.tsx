@@ -5,6 +5,7 @@ import RootLayout from '@/components/common/RootLayout'
 import ForgotPassword from '@/pages/ForgotPassword'
 import Login from '@/pages/Login'
 import MapHome from '@/pages/MapHome'
+import Profile from '@/pages/Profile'
 import ResetPassword from '@/pages/ResetPassword'
 import Signup from '@/pages/Signup'
 import SignupSent from '@/pages/SignupSent'
@@ -28,7 +29,8 @@ export const router = createBrowserRouter([
         // 로그인 필요 — 비로그인이면 /login 으로, 로그인 후 원래 경로로 복귀
         element: <RequireAuth />,
         children: [
-          // TODO(M2~): LogCreate, Profile, ChatList, ChatRoom, CrewList, AnalysisResult
+          { path: 'profile', element: <Profile /> },
+          // TODO(M2~): LogCreate, ChatList, ChatRoom, CrewList, AnalysisResult
         ],
       },
       // TODO: GymDetail, Feed, Board, PostDetail (공개)

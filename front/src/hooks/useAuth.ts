@@ -32,6 +32,15 @@ export function useMe() {
   })
 }
 
+export function useUpdateMe() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (input: authApi.MeUpdate) => authApi.updateMe(input),
+    // 서버가 돌려준 최신값으로 캐시를 바로 바꾼다 — 헤더 닉네임도 즉시 반영
+    onSuccess: (me) => queryClient.setQueryData(['me'], me),
+  })
+}
+
 export function useLogout() {
   const clear = useAuthStore((s) => s.clear)
   const queryClient = useQueryClient()

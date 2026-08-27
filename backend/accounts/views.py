@@ -134,4 +134,7 @@ class MeView(generics.RetrieveUpdateAPIView):
     serializer_class = MeSerializer
 
     def get_object(self):
+        # 프로필은 가입(register_user) 때 만들어지지만 createsuperuser·admin 으로
+        # 만든 계정에는 없다. 없으면 여기서 만들어 profile 접근 500 을 막는다.
+        services.ensure_profile(self.request.user)
         return self.request.user

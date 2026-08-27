@@ -7,6 +7,7 @@ from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
 from accounts.exceptions import EmailNotVerified
 from accounts.models import User
+from gyms.models import Gym
 
 # 입력 규칙 — 프론트(front/src/lib/validation.ts)와 동일하게 유지할 것.
 # 클라이언트 검증은 UX용일 뿐이라 서버에서도 같은 규칙을 강제한다.
@@ -140,6 +141,17 @@ class MeSerializer(serializers.ModelSerializer):
     image = serializers.URLField(
         source="profile.image", allow_blank=True, required=False
     )
+    # 홈짐은 pk 로 쓰고, 화면 표시용 이름은 읽기 전용으로 함께 내려준다.
+    home_gym = serializers.PrimaryKeyRelatedField(
+        source="profile.home_gym",
+        queryset=Gym.objects.all(),
+        allow_null=True,
+        required=False,
+        error_messages={"does_not_exist": "존재하지 않는 암장입니다."},
+    )
+    home_gym_name = serializers.CharField(
+        source="profile.home_gym.name", read_only=True, default=None
+    )
 
     class Meta:
         model = User
@@ -149,10 +161,18 @@ class MeSerializer(serializers.ModelSerializer):
             "nickname",
             "bio",
             "image",
+            "home_gym",
+            "home_gym_name",
             "email_verified_at",
             "created_at",
         )
-        read_only_fields = ("id", "email", "email_verified_at", "created_at")
+        read_only_fields = (
+            "id",
+            "email",
+            "home_gym_name",
+            "email_verified_at",
+            "created_at",
+        )
 
     def update(self, instance, validated_data):
         profile_data = validated_data.pop("profile", {})
@@ -233,3 +253,4 @@ class LoginSerializer(TokenObtainPairSerializer):
             write_only=True,
             style={"input_type": "password"},
         )
+

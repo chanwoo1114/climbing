@@ -34,7 +34,12 @@ export default function RootLayout() {
           </Link>
           {me ? (
             <div className="flex min-w-0 items-center gap-1 text-sm">
-              <span className="max-w-40 truncate text-ink-500">{me.nickname}</span>
+              <Link
+                to="/profile"
+                className={`${HEADER_ACTION} max-w-40 truncate text-ink-500 hover:text-ink-700`}
+              >
+                {me.nickname}
+              </Link>
               <button
                 type="button"
                 onClick={() => logout.mutate()}

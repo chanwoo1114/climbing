@@ -45,7 +45,7 @@ export default function TextField({ label, id, check, type, ...rest }: Props) {
             type={type}
             aria-invalid={state === 'invalid'}
             aria-describedby={hasMessage ? messageId : undefined}
-            className={`min-h-11 w-full rounded-xl border bg-white px-3 py-2.5 pr-9 text-ink-700 transition-colors duration-150 placeholder:text-ink-300 focus:outline-none ${BORDER[state]}`}
+            className={`min-h-11 w-full rounded-xl border bg-white px-3 py-2.5 pr-9 text-ink-700 transition-colors duration-150 placeholder:text-ink-300 focus:outline-none disabled:cursor-not-allowed disabled:bg-chalk-100 disabled:text-ink-400 ${BORDER[state]}`}
             {...(type === 'email' ? EMAIL_DEFAULTS : {})}
             {...rest}
           />

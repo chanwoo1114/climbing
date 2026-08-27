@@ -27,6 +27,12 @@ def register_user(*, email: str, nickname: str, password: str) -> User:
     return user
 
 
+def ensure_profile(user: User) -> UserProfile:
+    """프로필이 없는 계정(createsuperuser·admin 생성)에 빈 프로필을 붙인다."""
+    profile, _ = UserProfile.objects.get_or_create(user=user)
+    return profile
+
+
 def verify_email(*, token: str) -> User:
     """인증 링크의 토큰을 확인하고 email_verified_at 을 찍는다. 재클릭은 no-op."""
     user = read_email_verification_token(token)
