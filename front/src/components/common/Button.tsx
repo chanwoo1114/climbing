@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes } from 'react'
 
-type Variant = 'primary' | 'secondary'
+type Variant = 'primary' | 'secondary' | 'danger'
 
 interface Props extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: Variant
@@ -20,6 +20,8 @@ const VARIANT: Record<Variant, string> = {
   // hold-500 은 화면당 주요 CTA 1개에만
   primary: 'bg-hold-500 text-white hover:bg-hold-600',
   secondary: 'border border-chalk-300 bg-white text-ink-600 hover:bg-chalk-100',
+  // 삭제 확인 등 파괴적 액션 전용 — 확인 모달 안에서만 쓴다
+  danger: 'bg-danger-500 text-white hover:bg-danger-600',
 }
 
 export default function Button({
