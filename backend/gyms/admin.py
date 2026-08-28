@@ -1,6 +1,13 @@
 from django.contrib import admin
 
-from gyms.models import Gym, GymDifficulty, GymImage, GymPrice, GymReview
+from gyms.models import (
+    Gym,
+    GymDifficulty,
+    GymImage,
+    GymManager,
+    GymPrice,
+    GymReview,
+)
 
 
 class GymDifficultyInline(admin.TabularInline):
@@ -32,3 +39,12 @@ class GymReviewAdmin(admin.ModelAdmin):
     list_display = ("gym", "user", "rating", "created_at")
     search_fields = ("gym__name", "user__nickname")
     raw_id_fields = ("gym", "user")
+
+
+@admin.register(GymManager)
+class GymManagerAdmin(admin.ModelAdmin):
+    """첫 관리자 지정은 여기서 — 이후 관리자 추가/해제는 API 로."""
+
+    list_display = ("gym", "user", "note", "created_at")
+    search_fields = ("gym__name", "user__nickname", "user__email")
+    raw_id_fields = ("gym", "user", "assigned_by")

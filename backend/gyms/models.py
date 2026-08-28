@@ -126,3 +126,45 @@ class GymReview(BaseModel):
 
     def __str__(self):
         return f"{self.gym.name} 리뷰 ({self.rating})"
+
+
+class GymManager(BaseModel):
+    """암장 관리자 — 암장 정보/난이도/사진/가격표를 편집할 수 있는 회원.
+
+    첫 관리자는 운영자(is_staff)가 Django admin 에서 지정하고, 이후에는 관리자가
+    API 로 다른 회원을 추가한다. is_staff 계정은 행이 없어도 관리자 권한을 갖는다.
+    """
+
+    gym = models.ForeignKey(
+        Gym, on_delete=models.CASCADE, related_name="managers", db_comment="암장 FK"
+    )
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="gym_managements",
+        db_comment="관리자 회원 FK",
+    )
+    assigned_by = models.ForeignKey(
+        "accounts.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+        db_comment="지정한 회원 FK (admin 지정 시 NULL 가능)",
+    )
+    note = models.CharField(max_length=100, blank=True, db_comment="비고 (예: 점장)")
+
+    class Meta:
+        db_table_comment = (
+            "암장 관리자 — 암장당 여러 명. (gym, user) 는 살아있는 행 기준 유일"
+        )
+        constraints = [
+            models.UniqueConstraint(
+                fields=["gym", "user"],
+                condition=models.Q(is_deleted=False),
+                name="uniq_gym_manager",
+            )
+        ]
+
+    def __str__(self):
+        return f"{self.gym.name} 관리자 {self.user_id}"
