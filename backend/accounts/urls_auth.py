@@ -5,6 +5,7 @@ from accounts.views import (
     KakaoCallbackView,
     RefreshView,
     LoginView,
+    PasswordChangeView,
     LogoutView,
     PasswordResetConfirmView,
     PasswordResetRequestView,
@@ -32,6 +33,11 @@ urlpatterns = [
         "password-reset/",
         PasswordResetRequestView.as_view(),
         name="password-reset",
+    ),
+    path(
+        "password/change/",
+        PasswordChangeView.as_view(),
+        name="password-change",
     ),
     path(
         "password-reset/confirm/",

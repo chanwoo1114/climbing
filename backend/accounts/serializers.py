@@ -391,3 +391,44 @@ class SocialAccountSerializer(serializers.ModelSerializer):
         model = SocialAccount
         fields = ("provider", "connected_at", "email_at_provider")
         read_only_fields = fields
+
+
+class PasswordChangeSerializer(serializers.Serializer):
+    """로그인 상태 비밀번호 변경 입력. 새 비밀번호 규칙 검증은 user 가 필요해서
+    services.change_password 에서 한다."""
+
+    current_password = serializers.CharField(
+        write_only=True,
+        max_length=PASSWORD_MAX_LENGTH,
+        style={"input_type": "password"},
+        error_messages={"blank": "현재 비밀번호를 입력해 주세요."},
+    )
+    new_password = serializers.CharField(
+        write_only=True,
+        max_length=PASSWORD_MAX_LENGTH,
+        style={"input_type": "password"},
+        error_messages={
+            "blank": "새 비밀번호를 입력해 주세요.",
+            "max_length": f"비밀번호는 {PASSWORD_MAX_LENGTH}자 이하여야 합니다.",
+        },
+    )
+
+
+class TokenPairSerializer(serializers.Serializer):
+    """비밀번호 변경 후 새로 발급하는 토큰 쌍 (응답 스키마용)."""
+
+    access = serializers.CharField(read_only=True)
+    refresh = serializers.CharField(read_only=True)
+
+
+class WithdrawSerializer(serializers.Serializer):
+    """회원 탈퇴 입력. 비밀번호가 있는 계정은 필수, 소셜 전용 계정은 생략 가능."""
+
+    password = serializers.CharField(
+        write_only=True,
+        required=False,
+        allow_blank=True,
+        default="",
+        max_length=PASSWORD_MAX_LENGTH,
+        style={"input_type": "password"},
+    )

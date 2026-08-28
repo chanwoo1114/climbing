@@ -20,14 +20,17 @@ from accounts.serializers import (
     LoginSerializer,
     LogoutSerializer,
     MeSerializer,
+    PasswordChangeSerializer,
     PasswordResetConfirmSerializer,
     PublicProfileSerializer,
     RefreshSerializer,
     RegisterSerializer,
     SocialAccountSerializer,
     SocialTokenSerializer,
+    TokenPairSerializer,
     UserSerializer,
     VerifyEmailSerializer,
+    WithdrawSerializer,
 )
 from accounts.throttles import (
     EmailSendRateThrottle,
@@ -149,6 +152,21 @@ class PasswordResetConfirmView(_PublicView):
 
 
 @extend_schema(tags=["users"])
+@extend_schema(
+    tags=["auth"], request=PasswordChangeSerializer, responses=TokenPairSerializer
+)
+class PasswordChangeView(APIView):
+    """로그인 상태 비밀번호 변경. 기존 refresh 토큰은 전부 무효화되고 새 토큰 쌍을 돌려준다."""
+
+    def post(self, request):
+        serializer = PasswordChangeSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        tokens = services.change_password(
+            user=request.user, **serializer.validated_data
+        )
+        return Response(tokens)
+
+
 class MeView(generics.RetrieveUpdateAPIView):
     """내 정보 조회/수정."""
 
@@ -159,6 +177,14 @@ class MeView(generics.RetrieveUpdateAPIView):
         # 만든 계정에는 없다. 없으면 여기서 만들어 profile 접근 500 을 막는다.
         services.ensure_profile(self.request.user)
         return self.request.user
+
+    @extend_schema(request=WithdrawSerializer, responses={204: None})
+    def delete(self, request):
+        """회원 탈퇴 — 비밀번호 재확인(소셜 전용 계정은 생략) 후 soft delete."""
+        serializer = WithdrawSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        services.withdraw_user(user=request.user, **serializer.validated_data)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 @extend_schema(tags=["users"])
