@@ -11,10 +11,13 @@ import type { CursorPage } from '@/api/gyms'
 import {
   deleteNotification,
   fetchNotifications,
+  fetchNotificationSettings,
   fetchUnreadCount,
   markAllNotificationsRead,
   markNotificationRead,
+  updateNotificationSettings,
   type Notification,
+  type NotificationSettings,
 } from '@/api/notifications'
 import { useAuthStore } from '@/stores/authStore'
 
@@ -183,5 +186,36 @@ export function useDeleteNotification(id: number) {
     mutationFn: () => deleteNotification(id),
     onMutate: () => removeNotification(queryClient, id),
     onError: () => queryClient.invalidateQueries({ queryKey: notificationsKey }),
+  })
+}
+
+// --- 알림 설정 (pages/Settings) — 낙관적 갱신, 실패하면 이전 값으로 되돌린다 ---
+
+export const settingsKey = ['notifications', 'settings'] as const
+
+export function useNotificationSettings() {
+  const authenticated = useAuthStore((s) => s.status === 'authenticated')
+  return useQuery({
+    queryKey: settingsKey,
+    queryFn: fetchNotificationSettings,
+    enabled: authenticated,
+  })
+}
+
+export function useUpdateNotificationSettings() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (patch: Partial<NotificationSettings>) => updateNotificationSettings(patch),
+    onMutate: async (patch) => {
+      // 진행 중인 재조회가 낙관적 값을 덮어쓰지 않게 멈춘다
+      await queryClient.cancelQueries({ queryKey: settingsKey })
+      const previous = queryClient.getQueryData<NotificationSettings>(settingsKey)
+      if (previous) queryClient.setQueryData(settingsKey, { ...previous, ...patch })
+      return { previous }
+    },
+    onError: (_error, _patch, context) => {
+      if (context?.previous) queryClient.setQueryData(settingsKey, context.previous)
+    },
+    onSuccess: (settings) => queryClient.setQueryData(settingsKey, settings),
   })
 }

@@ -1,8 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router'
 
 import * as authApi from '@/api/auth'
 import { safeReturnPath, saveKakaoRoundTrip } from '@/lib/kakaoLogin'
 import { getRefreshToken, useAuthStore } from '@/stores/authStore'
+import { useToastStore } from '@/stores/toastStore'
 
 export function useLogin() {
   const setSession = useAuthStore((s) => s.setSession)
@@ -149,5 +151,35 @@ export function useUnlinkSocial() {
   return useMutation({
     mutationFn: (provider: authApi.SocialProvider) => authApi.unlinkSocial(provider),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['social-accounts'] }),
+  })
+}
+
+// --- 계정 설정 (pages/Settings) ---
+
+/** 비밀번호 변경 — 새 토큰 쌍으로의 세션 교체는 authApi.changePassword 가 한다 */
+export function useChangePassword() {
+  return useMutation({
+    mutationFn: (input: { currentPassword: string; newPassword: string }) =>
+      authApi.changePassword(input.currentPassword, input.newPassword),
+  })
+}
+
+/**
+ * 회원 탈퇴. 성공하면 홈으로 보낸 뒤 세션을 지운다 — 순서가 반대면 RequireAuth 가
+ * /settings 에서 anonymous 를 보고 /login 으로 먼저 보내 버린다 (같은 콜백 안이라 한 번에 반영된다).
+ */
+export function useWithdraw() {
+  const clear = useAuthStore((s) => s.clear)
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const pushToast = useToastStore((s) => s.push)
+  return useMutation({
+    mutationFn: (password: string) => authApi.withdrawAccount(password),
+    onSuccess: () => {
+      navigate('/', { replace: true })
+      clear()
+      queryClient.removeQueries({ queryKey: ['me'] })
+      pushToast({ title: '탈퇴가 완료되었습니다.', description: '그동안 함께해 주셔서 고마워요.' })
+    },
   })
 }

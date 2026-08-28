@@ -14,6 +14,13 @@ export type NotificationType =
   | 'crew_approved'
   | 'crew_rejected'
   | 'crew_joined'
+  /** 크루장 위임 — 대상은 crew */
+  | 'crew_owner'
+  /** 자세 분석·리포트 결과 — 대상은 climb_log (분석 패널은 /logs/{id} 에 있다) */
+  | 'analysis_done'
+  | 'analysis_failed'
+  | 'report_done'
+  | 'report_failed'
 
 /** 눌렀을 때 이동할 대상 종류 */
 export type NotificationTargetType = 'climb_log' | 'post' | 'recruitment' | 'crew' | 'user'
@@ -90,4 +97,59 @@ export async function markAllNotificationsRead(): Promise<number> {
 
 export async function deleteNotification(id: number): Promise<void> {
   await api.delete(`/notifications/${id}/`)
+}
+
+// --- 알림 설정 (pages/Settings) ---
+
+export interface NotificationSettings {
+  /** 브라우저 푸시(Web Push) 수신 여부 — 구독 자체는 push-subscriptions 로 따로 관리한다 */
+  pushEnabled: boolean
+  /** 이메일 알림(모집·크루 결과, 분석 완료) 수신 여부 */
+  emailEnabled: boolean
+}
+
+export async function fetchNotificationSettings(): Promise<NotificationSettings> {
+  const { data } = await api.get<NotificationSettings>('/notifications/settings/')
+  return data
+}
+
+/** 보낸 필드만 바뀐다. 갱신된 설정 전체를 돌려준다 */
+export async function updateNotificationSettings(
+  patch: Partial<NotificationSettings>,
+): Promise<NotificationSettings> {
+  const { data } = await api.patch<NotificationSettings>('/notifications/settings/', patch)
+  return data
+}
+
+// --- 브라우저 푸시 구독 (hooks/usePush) ---
+
+/** VAPID 공개키(base64url). 서버에 키가 없으면 503 push_not_configured */
+export async function fetchPushPublicKey(): Promise<string> {
+  const { data } = await api.get<{ publicKey: string }>('/notifications/push/public-key/')
+  return data.publicKey
+}
+
+/** PushSubscription.toJSON() 모양 그대로 — 서버가 endpoint 로 중복을 거른다 */
+export interface PushSubscriptionInput {
+  endpoint: string
+  keys: { p256dh: string; auth: string }
+  userAgent?: string
+}
+
+export interface PushSubscriptionRecord {
+  id: number
+  endpoint: string
+  createdAt: string
+}
+
+export async function createPushSubscription(
+  input: PushSubscriptionInput,
+): Promise<PushSubscriptionRecord> {
+  const { data } = await api.post<PushSubscriptionRecord>('/notifications/push-subscriptions/', input)
+  return data
+}
+
+/** 204 — endpoint 로 찾는다 (같은 브라우저의 구독만 지운다) */
+export async function deletePushSubscription(endpoint: string): Promise<void> {
+  await api.delete('/notifications/push-subscriptions/', { data: { endpoint } })
 }

@@ -1,4 +1,5 @@
 import { api } from '@/api/client'
+import { useAuthStore } from '@/stores/authStore'
 
 export interface TokenPair {
   access: string
@@ -117,4 +118,31 @@ export async function fetchSocialAccounts(): Promise<SocialAccount[]> {
 /** 204. 비밀번호 없는 계정의 마지막 연결이면 400 last_login_method */
 export async function unlinkSocial(provider: SocialProvider) {
   await api.delete(`/auth/social/${provider}/`)
+}
+
+// --- 계정 설정 (pages/Settings) ---
+
+/**
+ * 비밀번호 변경. 서버가 기존 refresh 토큰을 전부 블랙리스트에 넣고 새 토큰 쌍을 돌려주므로
+ * 여기서 바로 세션을 갈아끼운다 — 안 그러면 다음 재발급 때 로그아웃된다.
+ * 400 fields.current_password / fields.new_password, 400 no_password(소셜 전용 계정)
+ */
+export async function changePassword(
+  currentPassword: string,
+  newPassword: string,
+): Promise<TokenPair> {
+  const { data } = await api.post<TokenPair>('/auth/password/change/', {
+    currentPassword,
+    newPassword,
+  })
+  useAuthStore.getState().setSession(data.access, data.refresh)
+  return data
+}
+
+/**
+ * 회원 탈퇴 — 204. 비밀번호가 있는 계정은 password 필수(없으면 400 fields.password),
+ * 소셜 전용 계정은 비워도 된다. 크루장인 크루가 있으면 409 crew_owner.
+ */
+export async function withdrawAccount(password: string) {
+  await api.delete('/users/me/', { data: password ? { password } : {} })
 }

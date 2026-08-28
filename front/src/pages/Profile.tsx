@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useLocation } from 'react-router'
+import { useLocation, useNavigate } from 'react-router'
 
 import type { Me, MeUpdate, SocialAccount, SocialProvider } from '@/api/auth'
 import { getErrorMessage, getFieldError } from '@/api/client'
@@ -43,6 +43,7 @@ const toSelectValue = (gymId: number | null) => (gymId === null ? '' : String(gy
 
 function ProfileForm({ me }: { me: Me }) {
   const location = useLocation()
+  const navigate = useNavigate()
   // 카카오로 막 가입한 경우 KakaoCallback 이 state.welcome 을 실어 보낸다 — 닉네임은 카카오 것 그대로다
   const welcome = (location.state as { welcome?: string } | null)?.welcome === 'kakao'
   const updateMutation = useUpdateMe()
@@ -203,6 +204,16 @@ function ProfileForm({ me }: { me: Me }) {
       </form>
 
       <ConnectedAccounts />
+
+      {/* 알림·푸시·비밀번호 변경·탈퇴는 설정 페이지로 — 프로필 폼과 섞지 않는다 */}
+      <Button
+        variant="secondary"
+        full
+        className="mt-4"
+        onClick={() => navigate('/settings')}
+      >
+        계정 설정
+      </Button>
 
       <p className="mt-4 text-center text-xs text-ink-400">
         {joinedAt.format(new Date(me.createdAt))} 가입
