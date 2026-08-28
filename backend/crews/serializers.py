@@ -227,6 +227,12 @@ class CrewMemberSerializer(serializers.ModelSerializer):
         read_only_fields = fields
 
 
+class CrewOwnerTransferSerializer(serializers.Serializer):
+    """크루장 위임 입력 — 새 크루장 회원 id."""
+
+    user_id = serializers.IntegerField(min_value=1)
+
+
 class CrewMemberUpdateSerializer(serializers.Serializer):
     """크루장/운영진의 크루원 관리 입력 — status(승인/거절) 또는 role(역할) 중 하나."""
 

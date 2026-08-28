@@ -37,10 +37,8 @@ class NoPassword(APIException):
 
 
 class CrewOwnerCannotWithdraw(APIException):
-    """크루장인 크루가 남아 있으면 탈퇴할 수 없다 (크루를 먼저 삭제해야 한다)."""
+    """크루장인 크루가 남아 있으면 탈퇴할 수 없다 (크루장을 위임하거나 크루를 삭제해야 한다)."""
 
     status_code = status.HTTP_409_CONFLICT
-    default_detail = (
-        "크루장인 크루가 있어 탈퇴할 수 없습니다. 크루를 먼저 삭제해 주세요."
-    )
+    default_detail = "크루장인 크루가 있어 탈퇴할 수 없습니다. 크루장을 위임하거나 크루를 먼저 삭제해 주세요."
     default_code = "crew_owner"

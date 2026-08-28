@@ -15,6 +15,7 @@ from crews.serializers import (
     CrewListSerializer,
     CrewMemberSerializer,
     CrewMemberUpdateSerializer,
+    CrewOwnerTransferSerializer,
     CrewRankSerializer,
     CrewSerializer,
     CrewStatsSerializer,
@@ -32,6 +33,7 @@ from crews.services import (
     leave_crew,
     set_member_role,
     set_member_status,
+    transfer_ownership,
 )
 from crews.stats import (
     CREW_RANKING_DEFAULT_LIMIT,
@@ -78,6 +80,11 @@ class OldestFirstPagination(DefaultCursorPagination):
     parameters=[
         OpenApiParameter("gym", int, description="주 활동 암장 id 필터"),
         OpenApiParameter("q", str, description="크루 이름 검색 (부분 일치)"),
+        OpenApiParameter(
+            "region",
+            str,
+            description="지역 필터 — 주 활동 암장 주소 부분 일치 (예: 강남구)",
+        ),
     ],
 )
 class CrewListCreateView(generics.ListCreateAPIView):
@@ -100,6 +107,9 @@ class CrewListCreateView(generics.ListCreateAPIView):
         q = self.request.query_params.get("q", "").strip()
         if q:
             queryset = queryset.filter(name__icontains=q)
+        region = self.request.query_params.get("region", "").strip()
+        if region:
+            queryset = queryset.filter(home_gym__address__icontains=region)
         return queryset
 
     @extend_schema(request=CrewWriteSerializer, responses={201: CrewSerializer})
@@ -170,6 +180,21 @@ class CrewLeaveView(APIView):
     def delete(self, request, pk):
         leave_crew(_get_crew(pk), request.user)
         return Response(status=status.HTTP_204_NO_CONTENT)
+
+
+@extend_schema(
+    tags=["crews"], request=CrewOwnerTransferSerializer, responses=CrewSerializer
+)
+class CrewOwnerTransferView(APIView):
+    """크루장 위임 — 크루장만. 새 크루장은 활동 중인 크루원, 기존 크루장은 운영진이 된다."""
+
+    def post(self, request, pk):
+        crew = _get_crew(pk)
+        _require_owner(crew, request.user, "크루장만 위임할 수 있습니다.")
+        serializer = CrewOwnerTransferSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        transfer_ownership(crew, serializer.validated_data["user_id"], request.user)
+        return Response(_crew_detail_data(request, pk))
 
 
 # --- 크루원 -------------------------------------------------------------------

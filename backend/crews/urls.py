@@ -8,6 +8,7 @@ from crews.views import (
     CrewListCreateView,
     CrewMemberDetailView,
     CrewMemberListView,
+    CrewOwnerTransferView,
     CrewRankingView,
     CrewRecruitmentListView,
     CrewStatsView,
@@ -27,6 +28,7 @@ urlpatterns = [
     ),
     path("<int:pk>/join/", CrewJoinView.as_view(), name="crew-join"),
     path("<int:pk>/leave/", CrewLeaveView.as_view(), name="crew-leave"),
+    path("<int:pk>/transfer/", CrewOwnerTransferView.as_view(), name="crew-transfer"),
     path("<int:pk>/feed/", CrewFeedView.as_view(), name="crew-feed"),
     path("<int:pk>/stats/", CrewStatsView.as_view(), name="crew-stats"),
     path(

@@ -22,7 +22,11 @@ from crews.exceptions import (
     OwnerCannotLeave,
 )
 from crews.models import Crew, CrewMember
-from notifications.services import notify_crew_joined, notify_crew_member_status
+from notifications.services import (
+    notify_crew_joined,
+    notify_crew_member_status,
+    notify_crew_owner_transferred,
+)
 
 DESCRIPTION_PREVIEW_LENGTH = 100
 
@@ -271,6 +275,41 @@ def set_member_role(crew: Crew, target_user_id: int, role: str):
     member.role = role
     member.save(update_fields=["role", "updated_at"])
     return member
+
+
+@transaction.atomic
+def transfer_ownership(crew: Crew, target_user_id: int, actor) -> Crew:
+    """크루장 위임 — 새 크루장(활동 중 크루원)은 owner, 기존 크루장은 staff 로.
+
+    권한(요청자가 크루장) 검사는 뷰가 한다. 크루장이 크루를 떠나거나 탈퇴하려면
+    먼저 위임해야 한다 (leave_crew: OwnerCannotLeave, accounts.withdraw_user: 409).
+    """
+    from rest_framework import serializers as drf_serializers
+
+    crew = _lock(crew)
+    if target_user_id == crew.owner_id:
+        raise drf_serializers.ValidationError({"user_id": ["이미 크루장입니다."]})
+    new_owner = (
+        CrewMember.objects.select_for_update()
+        .select_related("user")
+        .filter(crew=crew, user_id=target_user_id, status=CrewMember.Status.ACTIVE)
+        .first()
+    )
+    if new_owner is None:
+        raise drf_serializers.ValidationError(
+            {"user_id": ["활동 중인 크루원에게만 위임할 수 있습니다."]}
+        )
+    old_owner = CrewMember.objects.select_for_update().get(
+        crew=crew, user_id=crew.owner_id, status=CrewMember.Status.ACTIVE
+    )
+    old_owner.role = CrewMember.Role.STAFF
+    old_owner.save(update_fields=["role", "updated_at"])
+    new_owner.role = CrewMember.Role.OWNER
+    new_owner.save(update_fields=["role", "updated_at"])
+    crew.owner = new_owner.user
+    crew.save(update_fields=["owner", "updated_at"])
+    notify_crew_owner_transferred(crew, actor)
+    return crew
 
 
 @transaction.atomic
