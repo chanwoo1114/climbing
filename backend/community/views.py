@@ -1,3 +1,4 @@
+from django.db.models import Q
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics, status
 from rest_framework.exceptions import NotFound, PermissionDenied
@@ -64,6 +65,7 @@ class OldestFirstPagination(DefaultCursorPagination):
             "category", str, enum=Post.Category.values, description="free | recruit"
         ),
         OpenApiParameter("gym", int, description="관련 암장 id 필터"),
+        OpenApiParameter("q", str, description="제목·본문 검색 (부분 일치)"),
     ],
 )
 class PostListCreateView(generics.ListCreateAPIView):
@@ -78,7 +80,11 @@ class PostListCreateView(generics.ListCreateAPIView):
         return PostListSerializer
 
     def get_queryset(self):
-        return annotated_posts(self.request.user)
+        queryset = annotated_posts(self.request.user)
+        q = self.request.query_params.get("q", "").strip()
+        if q:
+            queryset = queryset.filter(Q(title__icontains=q) | Q(content__icontains=q))
+        return queryset
 
     @extend_schema(request=PostWriteSerializer, responses={201: PostSerializer})
     def create(self, request, *args, **kwargs):
