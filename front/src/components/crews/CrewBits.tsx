@@ -10,6 +10,24 @@ import {
 
 export const count = new Intl.NumberFormat('ko-KR')
 
+/** 성공률(0~100) — 소수 1자리까지. "%" 는 호출부가 붙인다 */
+export const percent = new Intl.NumberFormat('ko-KR', { maximumFractionDigits: 1 })
+
+/** 순위 배지 — 1~3위는 ochre 로 살짝 띄우고 나머지는 중립. 동점은 같은 숫자가 나란히 온다 */
+export function RankBadge({ rank }: { rank: number }) {
+  const top = rank <= 3
+  return (
+    <span
+      className={`inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-semibold tabular-nums ${
+        top ? 'bg-ochre-100 text-ochre-500' : 'bg-chalk-200 text-ink-500'
+      }`}
+    >
+      <span className="sr-only">{count.format(rank)}위</span>
+      <span aria-hidden>{count.format(rank)}</span>
+    </span>
+  )
+}
+
 /** "12/30명" — 활동 중인 크루원(크루장 포함) / 최대 인원 */
 export const memberCountText = (crew: Pick<CrewSummary, 'memberCount' | 'maxMembers'>) =>
   `${count.format(crew.memberCount)}/${count.format(crew.maxMembers)}명`

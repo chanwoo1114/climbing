@@ -14,13 +14,16 @@ import {
   fetchCrew,
   fetchCrewFeed,
   fetchCrewMembers,
+  fetchCrewRanking,
   fetchCrewRecruitments,
+  fetchCrewStats,
   fetchCrews,
   joinCrew,
   kickCrewMember,
   leaveCrew,
   setCrewMemberRole,
   setCrewMemberStatus,
+  transferCrewOwner,
   updateCrew,
   type Crew,
   type CrewInput,
@@ -28,6 +31,7 @@ import {
   type CrewMemberStatus,
   type CrewSummary,
   type CrewUpdate,
+  CREW_RANKING_DEFAULT_LIMIT,
   isActiveStatus,
 } from '@/api/crews'
 import type { CursorPage } from '@/api/gyms'
@@ -39,12 +43,17 @@ import type { CursorPage } from '@/api/gyms'
  * - ['crews', id, 'members', status]       크루원 (무한) — active / pending
  * - ['feed', 'crew', id]                   크루 피드 (무한) — 'feed' 접두사라 useClimbs 의 좋아요 반영 대상
  * - ['posts', 'list', { crew: id }]        크루 주최 모집글 (무한) — usePosts 의 댓글 수 반영·무효화 대상
- * ['crews', id] 무효화에 크루원 목록이 같이 딸려간다.
+ * - ['crews', id, 'stats', month]          크루 월간 통계 (통계 탭)
+ * - ['crews', 'ranking', { month, limit }] 전체 크루 랭킹
+ * ['crews', id] 무효화에 크루원 목록·통계가 같이 딸려간다.
  */
 const listKey = (params: CrewListParams) => ['crews', 'list', params] as const
 const crewKey = (id: number) => ['crews', id] as const
 const membersKey = (id: number, status: CrewMemberStatus) =>
   ['crews', id, 'members', status] as const
+const statsKey = (id: number, month: string) => ['crews', id, 'stats', month] as const
+const rankingKey = (month: string, limit: number) =>
+  ['crews', 'ranking', { month, limit }] as const
 const feedKey = (id: number) => ['feed', 'crew', id] as const
 const recruitmentsKey = (id: number) => ['posts', 'list', { crew: id }] as const
 
@@ -123,6 +132,25 @@ export function useCrewRecruitments(id: number) {
     queryFn: ({ pageParam }) => fetchCrewRecruitments(id, pageParam),
     enabled: Number.isFinite(id),
     ...cursorPaging,
+  })
+}
+
+// --- 통계 / 랭킹 ---
+
+/** 권한은 피드와 같다 — 403(permission_denied) 은 재시도해도 같으니 바로 끝낸다 */
+export function useCrewStats(id: number, month: string) {
+  return useQuery({
+    queryKey: statsKey(id, month),
+    queryFn: () => fetchCrewStats(id, month),
+    enabled: Number.isFinite(id),
+    retry: false,
+  })
+}
+
+export function useCrewRanking(month: string, limit: number = CREW_RANKING_DEFAULT_LIMIT) {
+  return useQuery({
+    queryKey: rankingKey(month, limit),
+    queryFn: () => fetchCrewRanking(month, limit),
   })
 }
 
@@ -234,6 +262,22 @@ export function useSetCrewMemberRole(id: number) {
     mutationFn: ({ userId, role }: { userId: number; role: 'staff' | 'member' }) =>
       setCrewMemberRole(id, userId, role),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: membersKey(id, 'active') }),
+  })
+}
+
+/**
+ * 크루장 위임 — 응답이 상세 형태(owner·my_status 갱신)라 상세 캐시를 바로 갈아끼우고,
+ * 역할이 바뀐 크루원 목록과 목록 카드(owner)는 다시 받는다.
+ */
+export function useTransferCrewOwner(id: number) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: (userId: number) => transferCrewOwner(id, userId),
+    onSuccess: (crew) => {
+      queryClient.setQueryData(crewKey(id), crew)
+      queryClient.invalidateQueries({ queryKey: membersKey(id, 'active') })
+      queryClient.invalidateQueries(CREW_LISTS)
+    },
   })
 }
 

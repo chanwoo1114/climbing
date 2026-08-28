@@ -18,40 +18,59 @@ function gymFromParams(params: URLSearchParams): number | null {
   return Number.isInteger(value) && value > 0 ? value : null
 }
 
-/** 검색어·암장 필터 상태는 URL 에 산다 — 새로고침·공유해도 같은 화면 */
-function searchFor(q: string, gym: number | null): string {
+/** 검색어·암장·지역 필터 상태는 URL 에 산다 — 새로고침·공유해도 같은 화면 */
+function searchFor(q: string, gym: number | null, region = ''): string {
   const params = new URLSearchParams()
   if (q) params.set('q', q)
   if (gym !== null) params.set('gym', String(gym))
+  if (region) params.set('region', region)
   const query = params.toString()
   return query ? `?${query}` : ''
 }
+
+// 링크를 secondary 버튼처럼 — 페이지 이동은 <a> 여야 한다 (CrewDetail 과 같은 규칙)
+const LINK_BUTTON =
+  'inline-flex min-h-11 shrink-0 items-center justify-center rounded-xl border border-chalk-300 bg-white px-4 text-sm font-medium text-ink-600 transition-colors duration-150 hover:bg-chalk-100'
 
 export default function CrewList() {
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const q = searchParams.get('q')?.trim() ?? ''
+  const region = searchParams.get('region')?.trim() ?? ''
   const gymId = gymFromParams(searchParams)
   const [input, setInput] = useState(q)
+  const [regionInput, setRegionInput] = useState(region)
 
-  // 입력 → URL (디바운스). 암장 필터는 그대로 둔다
+  // 입력(이름·지역) → URL (디바운스). 암장 필터는 그대로 둔다
   useEffect(() => {
-    const next = input.trim()
-    if (next === q) return
+    const nextQ = input.trim()
+    const nextRegion = regionInput.trim()
+    if (nextQ === q && nextRegion === region) return
     const timer = setTimeout(() => {
-      setSearchParams(searchFor(next, gymId), { replace: true })
+      setSearchParams(searchFor(nextQ, gymId, nextRegion), { replace: true })
     }, DEBOUNCE_MS)
     return () => clearTimeout(timer)
-  }, [input, q, gymId, setSearchParams])
+  }, [input, regionInput, q, region, gymId, setSearchParams])
 
   // URL → 입력 (뒤로가기 등으로 바깥에서 바뀐 경우만)
   useEffect(() => {
     setInput((current) => (current.trim() === q ? current : q))
   }, [q])
+  useEffect(() => {
+    setRegionInput((current) => (current.trim() === region ? current : region))
+  }, [region])
+
+  const hasFilter = q !== '' || region !== '' || gymId !== null
+  const resetFilters = () => {
+    setInput('')
+    setRegionInput('')
+    setSearchParams('', { replace: true })
+  }
 
   const params: CrewListParams = {
     ...(q ? { q } : {}),
     ...(gymId !== null ? { gym: gymId } : {}),
+    ...(region ? { region } : {}),
   }
   const crews = useCrews(params)
   const items = crews.data?.pages.flatMap((page) => page.results) ?? []
@@ -64,11 +83,21 @@ export default function CrewList() {
     <div className="mx-auto max-w-xl">
       <div className="mb-4 flex items-center justify-between gap-3">
         <h1 className="text-2xl font-semibold text-ink-700">크루</h1>
-        {/* 이 페이지의 유일한 primary CTA */}
-        <Button onClick={() => navigate('/crews/new')}>크루 만들기</Button>
+        <div className="flex items-center gap-2">
+          <Link to="/crews/ranking" className={LINK_BUTTON}>
+            이달의 랭킹
+          </Link>
+          {/* 이 페이지의 유일한 primary CTA */}
+          <Button onClick={() => navigate('/crews/new')}>크루 만들기</Button>
+        </div>
       </div>
 
-      <form role="search" onSubmit={(e) => e.preventDefault()} noValidate>
+      <form
+        role="search"
+        onSubmit={(e) => e.preventDefault()}
+        noValidate
+        className="grid gap-3 sm:grid-cols-2"
+      >
         <TextField
           label="크루 이름"
           name="q"
@@ -79,12 +108,34 @@ export default function CrewList() {
           value={input}
           onChange={(e) => setInput(e.target.value)}
         />
+        <TextField
+          label="지역 (예: 강남구)"
+          name="region"
+          type="search"
+          autoComplete="off"
+          spellCheck={false}
+          placeholder="홈짐 주소로 찾기"
+          value={regionInput}
+          onChange={(e) => setRegionInput(e.target.value)}
+        />
       </form>
+
+      {hasFilter && (
+        <div className="mt-1 flex justify-end">
+          <button
+            type="button"
+            onClick={resetFilters}
+            className="inline-flex min-h-11 items-center px-2 text-xs font-medium text-ink-400 transition-colors duration-150 hover:text-ink-600"
+          >
+            초기화
+          </button>
+        </div>
+      )}
 
       {gymId !== null && (
         <div className="mt-3">
           <Link
-            to={`/crews${searchFor(q, null)}`}
+            to={`/crews${searchFor(q, null, region)}`}
             replace
             aria-label={`${gym.data?.name ?? '암장'} 필터 해제`}
             className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-xl border border-chalk-300 bg-white px-3 text-sm font-medium text-ink-600 transition-colors duration-150 hover:bg-chalk-100"
@@ -119,7 +170,7 @@ export default function CrewList() {
         )}
 
         {crews.data && items.length === 0 && (
-          <EmptyCrews q={q} filteredByGym={gymId !== null} />
+          <EmptyCrews q={q} region={region} filteredByGym={gymId !== null} />
         )}
 
         {items.length > 0 && (
@@ -156,7 +207,42 @@ export default function CrewList() {
   )
 }
 
-function EmptyCrews({ q, filteredByGym }: { q: string; filteredByGym: boolean }) {
+function EmptyCrews({
+  q,
+  region,
+  filteredByGym,
+}: {
+  q: string
+  region: string
+  filteredByGym: boolean
+}) {
+  if (region && !q) {
+    return (
+      <div role="status" className="rounded-card border border-chalk-300 bg-white p-8 text-center">
+        <p className="text-sm font-medium text-pretty break-words text-ink-600">
+          '{region}' 지역을 홈으로 하는 크루가 없어요
+        </p>
+        <p className="mt-1 text-xs text-pretty text-ink-400">
+          다른 지역명으로 찾아보거나 직접 만들어보세요.
+        </p>
+        <div className="mt-3 flex flex-wrap justify-center gap-1">
+          <Link
+            to="/crews/new"
+            className="inline-flex min-h-11 items-center px-3 text-sm font-medium text-hold-600 hover:underline"
+          >
+            크루 만들기
+          </Link>
+          <Link
+            to="/crews"
+            replace
+            className="inline-flex min-h-11 items-center px-3 text-sm font-medium text-ink-500 hover:text-ink-700"
+          >
+            전체 크루 보기
+          </Link>
+        </div>
+      </div>
+    )
+  }
   if (q) {
     return (
       <div role="status" className="rounded-card border border-chalk-300 bg-white p-8 text-center">

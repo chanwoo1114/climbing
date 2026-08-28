@@ -95,7 +95,54 @@ export type CrewUpdate = Partial<CrewInput>
 export interface CrewListParams {
   q?: string
   gym?: number
+  /** 홈짐 주소에 포함된 지역명 (예: 강남구) */
+  region?: string
 }
+
+// --- 통계 / 랭킹 (crews.stats — 읽기 전용) ---
+
+/** 크루원 활동 랭킹 한 줄. 동점은 같은 rank (1, 1, 3) */
+export interface CrewMemberRank {
+  rank: number
+  user: CrewUser
+  logCount: number
+  successCount: number
+}
+
+/** 크루 월간 통계 — 활동 중 크루원들의 공개 기록만 집계 */
+export interface CrewStats {
+  /** YYYY-MM */
+  month: string
+  /** 활동 중 크루원 수 */
+  memberCount: number
+  /** 이 달 기록이 있는 크루원 수 */
+  activeMemberCount: number
+  logCount: number
+  successCount: number
+  /** 0~100, 소수 1자리 */
+  successRate: number
+  gymCount: number
+  /** 완등 수 순 상위 10명 */
+  ranking: CrewMemberRank[]
+}
+
+export interface RankedCrew {
+  id: number
+  name: string
+  image: string | null
+  homeGym: CrewRef | null
+}
+
+/** 전체 크루 랭킹 한 줄. 동점은 같은 rank */
+export interface CrewRank {
+  rank: number
+  crew: RankedCrew
+  memberCount: number
+  logCount: number
+  successCount: number
+}
+
+export const CREW_RANKING_DEFAULT_LIMIT = 20
 
 /** backend crews.models 상수와 동일하게 유지 — 서버가 최종 판정 */
 export const CREW_NAME_MAX_LENGTH = 30
@@ -119,7 +166,7 @@ export const isManagerStatus = (status: CrewMyStatus | null) =>
 const CREW_ERRORS: Record<string, string> = {
   crew_full: '크루 정원이 모두 찼어요.',
   already_member: '이미 가입했거나 승인 대기 중인 크루예요.',
-  owner_cannot_leave: '크루장은 나갈 수 없어요. 크루를 삭제해 주세요.',
+  owner_cannot_leave: '크루장을 위임한 뒤 나갈 수 있어요.',
   not_crew_member: '가입한 크루가 아니에요.',
   cannot_change_owner: '크루장의 역할은 바꿀 수 없어요.',
   permission_denied: '권한이 없어요.',
@@ -179,6 +226,36 @@ export async function joinCrew(id: number): Promise<CrewMember> {
 /** 활동 중이면 탈퇴, 승인 대기 중이면 신청 취소. 크루장은 400 owner_cannot_leave */
 export async function leaveCrew(id: number): Promise<void> {
   await api.delete(`/crews/${id}/leave/`)
+}
+
+/**
+ * 크루장 위임 — 크루장만 (403). 대상은 활동 중인 크루원이어야 한다 (400 fields.user_id).
+ * 응답은 상세와 같은 형태: owner 가 대상으로, 호출자의 my_status 는 staff 로 바뀐다.
+ */
+export async function transferCrewOwner(id: number, userId: number): Promise<Crew> {
+  const { data } = await api.post<Crew>(`/crews/${id}/transfer/`, { userId })
+  return data
+}
+
+// --- 통계 / 랭킹 ---
+
+/** 크루 월간 통계. 권한은 피드와 같다 — 비공개 피드면 크루원만 (403 permission_denied) */
+export async function fetchCrewStats(id: number, month?: string): Promise<CrewStats> {
+  const { data } = await api.get<CrewStats>(`/crews/${id}/stats/`, {
+    params: month ? { month } : undefined,
+  })
+  return data
+}
+
+/** 전체 크루 랭킹 — 그 달 공개 완등 수 순. 페이지네이션 없음 */
+export async function fetchCrewRanking(
+  month?: string,
+  limit: number = CREW_RANKING_DEFAULT_LIMIT,
+): Promise<CrewRank[]> {
+  const { data } = await api.get<CrewRank[]>('/crews/ranking/', {
+    params: { limit, ...(month ? { month } : {}) },
+  })
+  return data
 }
 
 // --- 크루원 (가입 순 커서) ---

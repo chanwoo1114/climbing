@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router'
 
-import { getErrorCode, getErrorMessage } from '@/api/client'
+import { getErrorCode, getErrorMessage, getFieldError } from '@/api/client'
 import {
   crewErrorMessage,
   isActiveStatus,
@@ -22,6 +22,7 @@ import {
   count,
   memberCountText,
 } from '@/components/crews/CrewBits'
+import CrewStatsPanel from '@/components/crews/CrewStatsPanel'
 import { useMe } from '@/hooks/useAuth'
 import {
   useCrew,
@@ -34,21 +35,24 @@ import {
   useSetCrewMemberRole,
   useSetCrewMemberStatus,
   useSetMainCrew,
+  useTransferCrewOwner,
 } from '@/hooks/useCrews'
 import { useInfiniteSentinel } from '@/hooks/useInfiniteSentinel'
+import { useToastStore } from '@/stores/toastStore'
 
-type Tab = 'feed' | 'members' | 'recruitments'
+type Tab = 'feed' | 'members' | 'recruitments' | 'stats'
 
 const TABS: { value: Tab; label: string }[] = [
   { value: 'feed', label: '피드' },
   { value: 'members', label: '멤버' },
   { value: 'recruitments', label: '모집' },
+  { value: 'stats', label: '통계' },
 ]
 
 /** ?tab= 이 없거나 이상하면 피드 */
 function tabFromParams(params: URLSearchParams): Tab {
   const value = params.get('tab')
-  return value === 'members' || value === 'recruitments' ? value : 'feed'
+  return value === 'members' || value === 'recruitments' || value === 'stats' ? value : 'feed'
 }
 
 // 글자가 작은 인라인 액션(운영진 지정·내보내기)도 44px 터치 영역
@@ -152,6 +156,7 @@ function CrewDetailView({ crew }: { crew: Crew }) {
       {tab === 'feed' && <CrewFeed crew={crew} />}
       {tab === 'members' && <CrewMembers crew={crew} myId={me?.id ?? null} />}
       {tab === 'recruitments' && <CrewRecruitments crew={crew} />}
+      {tab === 'stats' && <CrewStatsPanel crew={crew} myId={me?.id ?? null} />}
     </div>
   )
 }
@@ -314,6 +319,20 @@ function CrewActions({ crew, isMain }: { crew: Crew; isMain: boolean }) {
         </p>
       )}
 
+      {/* 크루장은 나갈 수 없다 (서버 owner_cannot_leave) — 멤버 탭의 위임 액션으로 안내 */}
+      {status === 'owner' && (
+        <p className="text-xs text-pretty text-ink-400">
+          크루장을 위임한 뒤 나갈 수 있어요.{' '}
+          <Link
+            to={`/crews/${crew.id}?tab=members`}
+            replace
+            className="-my-2 inline-flex min-h-11 items-center font-medium text-hold-600 hover:underline"
+          >
+            크루장 위임하기
+          </Link>
+        </p>
+      )}
+
       {actionError && (
         <p role="alert" className="rounded-xl bg-danger-100 px-3 py-2 text-sm text-danger-600">
           {actionError}
@@ -392,13 +411,37 @@ function CrewMembers({ crew, myId }: { crew: Crew; myId: number | null }) {
 
   const setRole = useSetCrewMemberRole(crew.id)
   const kick = useKickCrewMember(crew.id)
+  const transfer = useTransferCrewOwner(crew.id)
+  const pushToast = useToastStore((s) => s.push)
   const [pendingKick, setPendingKick] = useState<CrewMember | null>(null)
+  const [pendingTransfer, setPendingTransfer] = useState<CrewMember | null>(null)
   const changingUserId = setRole.isPending ? setRole.variables?.userId : undefined
 
   const onKick = () => {
     if (!pendingKick) return
     kick.mutate(pendingKick.user.id, { onSuccess: () => setPendingKick(null) })
   }
+
+  const onTransfer = () => {
+    if (!pendingTransfer) return
+    const { nickname } = pendingTransfer.user
+    transfer.mutate(pendingTransfer.user.id, {
+      onSuccess: () => {
+        setPendingTransfer(null)
+        pushToast({
+          title: `${nickname}님이 새 크루장이 됐어요`,
+          description: '회원님은 운영진으로 남아요.',
+        })
+      },
+      // 대상이 이미 나갔거나 크루장인 경우(400 fields.user_id) — 모달을 닫고 목록 아래에 보여준다
+      onError: () => setPendingTransfer(null),
+    })
+  }
+
+  const transferError =
+    transfer.isError &&
+    (getFieldError(transfer.error, 'user_id') ??
+      crewErrorMessage(transfer.error, '크루장을 위임하지 못했습니다. 잠시 후 다시 시도해 주세요.'))
 
   return (
     <div className="space-y-4">
@@ -444,9 +487,21 @@ function CrewMembers({ crew, myId }: { crew: Crew; myId: number | null }) {
                 row.role !== 'owner' &&
                 (isOwner || (crew.myStatus === 'staff' && row.role === 'member'))
               const canChangeRole = isOwner && !isMe && row.role !== 'owner'
+              // 크루장 위임은 크루장만, 활동 중인 다른 크루원에게
+              const canTransfer = isOwner && !isMe && row.role !== 'owner' && row.status === 'active'
               return (
                 <li key={row.id} className="flex items-center gap-3 py-2">
                   <MemberRow member={row} isMe={isMe}>
+                    {canTransfer && (
+                      <button
+                        type="button"
+                        onClick={() => setPendingTransfer(row)}
+                        disabled={transfer.isPending}
+                        className={`${TEXT_ACTION} text-ink-400 hover:text-ink-600 disabled:opacity-50`}
+                      >
+                        크루장 위임
+                      </button>
+                    )}
                     {canChangeRole && (
                       <button
                         type="button"
@@ -504,7 +559,24 @@ function CrewMembers({ crew, myId }: { crew: Crew; myId: number | null }) {
             )}
           </p>
         )}
+        {transferError && (
+          <p role="alert" className="mt-3 rounded-xl bg-danger-100 px-3 py-2 text-sm text-danger-600">
+            {transferError}
+          </p>
+        )}
       </section>
+
+      <ConfirmDialog
+        open={pendingTransfer !== null}
+        title={`${pendingTransfer?.user.nickname ?? ''}님에게 크루장을 넘길까요?`}
+        description={`크루장을 ${pendingTransfer?.user.nickname ?? ''}님에게 넘깁니다. 회원님은 운영진이 됩니다.`}
+        confirmLabel="위임하기"
+        pendingLabel="위임하는 중…"
+        variant="primary"
+        pending={transfer.isPending}
+        onConfirm={onTransfer}
+        onCancel={() => setPendingTransfer(null)}
+      />
 
       <ConfirmDialog
         open={pendingKick !== null}
