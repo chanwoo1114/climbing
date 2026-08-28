@@ -1,6 +1,10 @@
 from django.urls import path
 
-from analysis.views import VideoAnalysisDetailView, VideoAnalysisListCreateView
+from analysis.views import (
+    VideoAnalysisDetailView,
+    VideoAnalysisListCreateView,
+    VideoAnalysisReportView,
+)
 
 app_name = "analysis"
 
@@ -8,4 +12,9 @@ app_name = "analysis"
 urlpatterns = [
     path("", VideoAnalysisListCreateView.as_view(), name="analysis-list"),
     path("<int:pk>/", VideoAnalysisDetailView.as_view(), name="analysis-detail"),
+    path(
+        "<int:pk>/report/",
+        VideoAnalysisReportView.as_view(),
+        name="analysis-report",
+    ),
 ]

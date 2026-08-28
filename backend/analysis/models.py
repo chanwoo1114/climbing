@@ -16,6 +16,19 @@ class VideoAnalysis(BaseModel):
         DONE = "done", "완료"
         FAILED = "failed", "실패"
 
+    class ReportStatus(models.TextChoices):
+        """AI 코칭 리포트 상태 — 자세 분석(status=done) 뒤에 별도로 요청한다.
+
+        none → pending → processing → done | failed. done/failed 에서 다시 요청하면
+        pending 으로 돌아가 재생성한다.
+        """
+
+        NONE = "none", "미생성"
+        PENDING = "pending", "대기"
+        PROCESSING = "processing", "생성 중"
+        DONE = "done", "완료"
+        FAILED = "failed", "실패"
+
     climb_log = models.OneToOneField(
         "climbs.ClimbLog",
         on_delete=models.CASCADE,
@@ -53,6 +66,38 @@ class VideoAnalysis(BaseModel):
     )
     task_id = models.CharField(
         max_length=64, blank=True, db_comment="마지막으로 큐에 넣은 Celery task id"
+    )
+
+    # --- AI 코칭 리포트 (analysis.coaching, Celery: generate_coaching_report) ---
+    report_status = models.CharField(
+        max_length=12,
+        choices=ReportStatus.choices,
+        default=ReportStatus.NONE,
+        db_index=True,
+        db_comment="코칭 리포트 상태 — none(미생성)/pending/processing/done/failed",
+    )
+    report = models.TextField(
+        blank=True, db_comment="LLM 이 생성한 코칭 리포트 본문 (한국어 markdown)"
+    )
+    report_error = models.TextField(
+        blank=True, db_comment="리포트 생성 실패 사유 (사용자에게 보여줄 수 있는 문장)"
+    )
+    report_model = models.CharField(
+        max_length=64, blank=True, db_comment="리포트를 생성한 LLM 모델 id (응답 기준)"
+    )
+    report_input_tokens = models.PositiveIntegerField(
+        default=0, db_comment="리포트 생성에 쓴 입력 토큰 수"
+    )
+    report_output_tokens = models.PositiveIntegerField(
+        default=0, db_comment="리포트 생성에 쓴 출력 토큰 수"
+    )
+    report_generated_at = models.DateTimeField(
+        null=True, blank=True, db_comment="리포트 생성 완료(done) 시각"
+    )
+    report_task_id = models.CharField(
+        max_length=64,
+        blank=True,
+        db_comment="마지막으로 큐에 넣은 리포트 생성 Celery task id",
     )
 
     class Meta:

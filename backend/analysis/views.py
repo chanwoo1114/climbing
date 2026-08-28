@@ -1,4 +1,4 @@
-from drf_spectacular.utils import OpenApiParameter, extend_schema
+from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
 from rest_framework import generics, status
 from rest_framework.response import Response
 
@@ -7,7 +7,12 @@ from analysis.serializers import (
     VideoAnalysisRequestSerializer,
     VideoAnalysisSerializer,
 )
-from analysis.services import request_analysis, visible_analyses
+from analysis.services import (
+    owned_analyses,
+    request_analysis,
+    request_coaching_report,
+    visible_analyses,
+)
 
 INCLUDE_KEYPOINTS = "keypoints"
 
@@ -74,3 +79,40 @@ class VideoAnalysisDetailView(generics.RetrieveAPIView):
         include = self.request.query_params.get("include", "")
         context["include_keypoints"] = INCLUDE_KEYPOINTS in include.split(",")
         return context
+
+
+@extend_schema(tags=["analysis"])
+class VideoAnalysisReportView(generics.GenericAPIView):
+    """AI 코칭 리포트 생성 요청 — 기록 작성자만 (남의 분석은 404)."""
+
+    serializer_class = VideoAnalysisSerializer
+
+    def get_queryset(self):
+        return owned_analyses(self.request.user)
+
+    @extend_schema(
+        request=None,
+        responses={
+            202: VideoAnalysisSerializer,
+            409: OpenApiResponse(
+                description=(
+                    "analysis_not_done: 자세 분석이 done 이 아님 / "
+                    "report_in_progress: 이미 pending·processing 인 리포트가 있음"
+                )
+            ),
+            503: OpenApiResponse(
+                description="coaching_not_configured: ANTHROPIC_API_KEY 미설정"
+            ),
+        },
+        description=(
+            "완료된(status=done) 자세 분석의 metrics 를 LLM 에 넣어 한국어 markdown "
+            "코칭 리포트를 만든다. report_status 가 pending 으로 바뀌고 Celery 가 처리하며, "
+            "결과는 GET analyses/{id}/ 의 report_status/report 로 폴링. "
+            "none·done(재생성)·failed 에서 요청할 수 있다."
+        ),
+    )
+    def post(self, request, *args, **kwargs):
+        analysis = request_coaching_report(self.get_object())
+        return Response(
+            VideoAnalysisSerializer(analysis).data, status=status.HTTP_202_ACCEPTED
+        )

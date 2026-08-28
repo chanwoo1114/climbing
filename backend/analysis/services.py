@@ -8,19 +8,19 @@ import logging
 from django.db import transaction
 from django.db.models import Q
 from django.utils import timezone
-from rest_framework import status
-from rest_framework.exceptions import APIException, PermissionDenied
+from rest_framework.exceptions import PermissionDenied
 
+from analysis.coaching import is_configured
+from analysis.exceptions import (
+    AnalysisNotDone,
+    CoachingNotConfigured,
+    ReportInProgress,
+    VideoRequired,
+)
 from analysis.models import VideoAnalysis
 from climbs.models import ClimbLog
 
 logger = logging.getLogger(__name__)
-
-
-class VideoRequired(APIException):
-    status_code = status.HTTP_400_BAD_REQUEST
-    default_detail = "분석할 영상이 없습니다. 기록에 영상을 먼저 올려 주세요."
-    default_code = "video_required"
 
 
 def visible_analyses(user):
@@ -29,6 +29,15 @@ def visible_analyses(user):
         VideoAnalysis.objects.select_related("climb_log")
         .filter(climb_log__is_deleted=False)
         .filter(Q(climb_log__user=user) | Q(climb_log__is_shared=True))
+        .order_by("-created_at")
+    )
+
+
+def owned_analyses(user):
+    """요청자 본인 기록의 분석만 — 리포트 생성처럼 작성자 전용 액션에 쓴다 (남의 건 404)."""
+    return (
+        VideoAnalysis.objects.select_related("climb_log")
+        .filter(climb_log__is_deleted=False, climb_log__user=user)
         .order_by("-created_at")
     )
 
@@ -70,6 +79,15 @@ def _reset(analysis: VideoAnalysis):
     analysis.processed_at = None
     analysis.retry_count = 0
     analysis.task_id = ""
+    # 지표가 바뀌므로 예전 리포트도 무효
+    analysis.report_status = VideoAnalysis.ReportStatus.NONE
+    analysis.report = ""
+    analysis.report_error = ""
+    analysis.report_model = ""
+    analysis.report_input_tokens = 0
+    analysis.report_output_tokens = 0
+    analysis.report_generated_at = None
+    analysis.report_task_id = ""
     analysis.save()
 
 
@@ -124,3 +142,66 @@ def mark_failed(analysis: VideoAnalysis, message: str):
     analysis.status = VideoAnalysis.Status.FAILED
     analysis.error_message = message
     analysis.save(update_fields=["status", "error_message", "updated_at"])
+
+
+# --- AI 코칭 리포트 -----------------------------------------------------------
+
+REPORT_ACTIVE = (
+    VideoAnalysis.ReportStatus.PENDING,
+    VideoAnalysis.ReportStatus.PROCESSING,
+)
+
+
+@transaction.atomic
+def request_coaching_report(analysis: VideoAnalysis) -> VideoAnalysis:
+    """코칭 리포트 생성을 요청한다 (pending 으로 두고 커밋 후 큐잉).
+
+    - API 키가 없으면 coaching_not_configured (503)
+    - 자세 분석이 done 이 아니면 analysis_not_done (409)
+    - 이미 pending/processing 이면 report_in_progress (409)
+    - none / done(재생성) / failed 에서 허용
+    """
+    if not is_configured():
+        raise CoachingNotConfigured()
+
+    analysis = VideoAnalysis.objects.select_for_update().get(pk=analysis.pk)
+    if analysis.status != VideoAnalysis.Status.DONE:
+        raise AnalysisNotDone()
+    if analysis.report_status in REPORT_ACTIVE:
+        raise ReportInProgress()
+
+    analysis.report_status = VideoAnalysis.ReportStatus.PENDING
+    analysis.report_error = ""
+    analysis.report_task_id = ""
+    analysis.save(
+        update_fields=["report_status", "report_error", "report_task_id", "updated_at"]
+    )
+    enqueue_coaching_report(analysis)
+    return analysis
+
+
+def enqueue_coaching_report(analysis: VideoAnalysis):
+    """커밋 후 Celery 태스크에 넣는다 (enqueue_analysis 와 같은 이유)."""
+    from analysis.tasks import generate_coaching_report  # 순환 import 회피
+
+    analysis_id = analysis.id
+
+    def _send():
+        result = generate_coaching_report.delay(analysis_id)
+        VideoAnalysis.all_objects.filter(pk=analysis_id).update(
+            report_task_id=str(result.id or "")
+        )
+
+    transaction.on_commit(_send)
+
+
+def mark_report_processing(analysis: VideoAnalysis):
+    analysis.report_status = VideoAnalysis.ReportStatus.PROCESSING
+    analysis.report_error = ""
+    analysis.save(update_fields=["report_status", "report_error", "updated_at"])
+
+
+def mark_report_failed(analysis: VideoAnalysis, message: str):
+    analysis.report_status = VideoAnalysis.ReportStatus.FAILED
+    analysis.report_error = message
+    analysis.save(update_fields=["report_status", "report_error", "updated_at"])

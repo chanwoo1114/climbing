@@ -5,12 +5,16 @@ from climbs.models import ClimbLog
 
 
 class VideoAnalysisSerializer(serializers.ModelSerializer):
-    """상태 + 결과. keypoints 는 크기 때문에 상세 조회 ?include=keypoints 일 때만 넣는다."""
+    """상태 + 결과 + AI 코칭 리포트. keypoints 는 크기 때문에 ?include=keypoints 일 때만."""
 
     climb_log = serializers.PrimaryKeyRelatedField(read_only=True)
     keypoints = serializers.JSONField(
         read_only=True,
         help_text="샘플링 프레임별 33 랜드마크. 상세 조회에서 ?include=keypoints 일 때만 포함",
+    )
+    report = serializers.CharField(
+        read_only=True,
+        help_text="AI 코칭 리포트 본문 (한국어 markdown). done 일 때만 채워짐",
     )
 
     class Meta:
@@ -24,6 +28,13 @@ class VideoAnalysisSerializer(serializers.ModelSerializer):
             "keypoints",
             "processed_at",
             "retry_count",
+            "report_status",
+            "report",
+            "report_error",
+            "report_model",
+            "report_input_tokens",
+            "report_output_tokens",
+            "report_generated_at",
             "created_at",
             "updated_at",
         )
