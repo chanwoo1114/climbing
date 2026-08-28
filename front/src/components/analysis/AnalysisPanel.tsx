@@ -3,17 +3,25 @@ import { useState } from 'react'
 import {
   JOINT_NAMES,
   isAnalysisRunning,
+  isReportRunning,
   type AnalysisMetrics,
   type JointName,
   type VideoAnalysis,
 } from '@/api/analysis'
 import type { ClimbLog } from '@/api/climbs'
-import { getErrorMessage } from '@/api/client'
+import { getErrorCode, getErrorMessage } from '@/api/client'
+import CoachingReport from '@/components/analysis/CoachingReport'
 import ComTrajectory from '@/components/analysis/ComTrajectory'
 import PoseOverlay from '@/components/analysis/PoseOverlay'
 import Button from '@/components/common/Button'
-import { useAnalysisKeypoints, useLogAnalysis, useRequestAnalysis } from '@/hooks/useAnalysis'
+import {
+  useAnalysisKeypoints,
+  useLogAnalysis,
+  useRequestAnalysis,
+  useRequestCoachingReport,
+} from '@/hooks/useAnalysis'
 import { useAuthStore } from '@/stores/authStore'
+import { useToastStore } from '@/stores/toastStore'
 
 const percent = new Intl.NumberFormat('ko-KR', { style: 'percent', maximumFractionDigits: 0 })
 const decimal2 = new Intl.NumberFormat('ko-KR', {
@@ -139,7 +147,7 @@ export default function AnalysisPanel({ log, isOwner }: Props) {
       )}
 
       {analysis.data?.status === 'done' && (
-        <Results analysis={analysis.data} videoUrl={log.videoUrl} />
+        <Results analysis={analysis.data} videoUrl={log.videoUrl} isOwner={isOwner} />
       )}
     </section>
   )
@@ -147,21 +155,30 @@ export default function AnalysisPanel({ log, isOwner }: Props) {
 
 // --- 진행 중 ---
 
-function Running({ analysis }: { analysis: VideoAnalysis }) {
+/** 끝나는 시점을 모르는 작업의 진행 바. 분석 대기/진행과 리포트 작성이 같이 쓴다 */
+function IndeterminateBar() {
   return (
-    <div role="status" className={CARD}>
+    <>
       {/* React 19 가 <style> 을 head 로 끌어올리고 href 로 중복 제거한다.
           transform 만 움직이고, 모션 축소 설정에선 정지된 전체 바로 보인다 */}
       <style href="analysis-indeterminate" precedence="default">
         {'@keyframes analysis-indeterminate{from{transform:translateX(-100%)}to{transform:translateX(300%)}}'}
       </style>
+      <div aria-hidden className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-chalk-200">
+        <div className="h-full w-1/3 rounded-full bg-hold-500 animate-[analysis-indeterminate_1.4s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:animate-none" />
+      </div>
+    </>
+  )
+}
+
+function Running({ analysis }: { analysis: VideoAnalysis }) {
+  return (
+    <div role="status" className={CARD}>
       <p className="text-sm font-medium text-ink-700">
         {analysis.status === 'pending' ? '분석 대기 중…' : '분석 중…'}{' '}
         <span className="font-normal text-ink-400">(보통 1~3분)</span>
       </p>
-      <div aria-hidden className="mt-3 h-1.5 w-full overflow-hidden rounded-full bg-chalk-200">
-        <div className="h-full w-1/3 rounded-full bg-hold-500 animate-[analysis-indeterminate_1.4s_ease-in-out_infinite] motion-reduce:w-full motion-reduce:animate-none" />
-      </div>
+      <IndeterminateBar />
       <p className="mt-2 text-xs text-pretty text-ink-400">
         이 페이지를 떠나도 분석은 계속돼요. 완료되면 여기에 결과가 표시됩니다.
         {analysis.retryCount > 0 && (
@@ -174,7 +191,15 @@ function Running({ analysis }: { analysis: VideoAnalysis }) {
 
 // --- 결과 ---
 
-function Results({ analysis, videoUrl }: { analysis: VideoAnalysis; videoUrl: string }) {
+function Results({
+  analysis,
+  videoUrl,
+  isOwner,
+}: {
+  analysis: VideoAnalysis
+  videoUrl: string
+  isOwner: boolean
+}) {
   const [showSkeleton, setShowSkeleton] = useState(false)
   const keypoints = useAnalysisKeypoints(analysis.id, showSkeleton)
   const metrics = analysis.metrics
@@ -241,7 +266,119 @@ function Results({ analysis, videoUrl }: { analysis: VideoAnalysis; videoUrl: st
           </div>
         )}
       </div>
+
+      <CoachingReportCard analysis={analysis} isOwner={isOwner} />
     </div>
+  )
+}
+
+// --- AI 코칭 리포트 ---
+
+const REPORT_REQUEST_FALLBACK = '리포트를 요청하지 못했습니다. 잠시 후 다시 시도해 주세요.'
+
+/**
+ * 분석이 done 인 기록의 "AI 코칭 리포트" 카드.
+ * - none: 작성자에게만 설명 + 만들기 버튼 (남에겐 카드 자체를 숨긴다)
+ * - pending/processing: 쓰는 중 표시 + 진행 바, 버튼 비활성 (폴링은 useLogAnalysis)
+ * - done: 마크다운 본문 + 생성 시각·모델, 작성자는 다시 만들기
+ * - failed: 사유 + 작성자 재시도
+ * 503 coaching_not_configured 는 오류가 아니라 "기능 없음" 안내로 바꾸고 버튼을 숨긴다.
+ * 그 밖의 요청 실패(409 등)는 서버 메시지를 토스트로 알린다.
+ */
+function CoachingReportCard({ analysis, isOwner }: { analysis: VideoAnalysis; isOwner: boolean }) {
+  const request = useRequestCoachingReport(analysis.id)
+  const status = analysis.reportStatus
+  const notConfigured = getErrorCode(request.error) === 'coaching_not_configured'
+
+  if (status === 'none' && !isOwner) return null
+
+  const run = () =>
+    request.mutate(undefined, {
+      onError: (error) => {
+        if (getErrorCode(error) === 'coaching_not_configured') return
+        useToastStore.getState().push({ title: getErrorMessage(error, REPORT_REQUEST_FALLBACK) })
+      },
+    })
+
+  const action = (label: string, variant: 'primary' | 'secondary') => {
+    if (!isOwner) return null
+    if (notConfigured) return <NotConfigured />
+    return (
+      <Button variant={variant} className="mt-3" onClick={run} disabled={request.isPending}>
+        {request.isPending ? '요청하는 중…' : label}
+      </Button>
+    )
+  }
+
+  return (
+    <div className={CARD}>
+      <h3 className="text-sm font-semibold text-ink-700">AI 코칭 리포트</h3>
+
+      {status === 'none' && (
+        <>
+          <p className="mt-1 text-xs text-pretty text-ink-400">
+            분석 지표를 바탕으로 AI 코치가 잘한 점과 개선 포인트를 정리해 드려요.
+          </p>
+          {action('리포트 만들기', 'secondary')}
+        </>
+      )}
+
+      {isReportRunning(analysis) && (
+        <div role="status">
+          <p className="mt-1 text-sm font-medium text-ink-700">
+            AI 코치가 리포트를 쓰고 있어요…{' '}
+            <span className="font-normal text-ink-400">(보통 1분 이내)</span>
+          </p>
+          <IndeterminateBar />
+          {isOwner && (
+            <Button variant="secondary" className="mt-3" disabled>
+              리포트 만들기
+            </Button>
+          )}
+        </div>
+      )}
+
+      {status === 'done' && (
+        <>
+          <div className="mt-2">
+            {analysis.report ? (
+              <CoachingReport markdown={analysis.report} />
+            ) : (
+              <p role="status" className="text-sm text-ink-400">
+                리포트 내용이 비어 있어요.
+              </p>
+            )}
+          </div>
+          <p className="mt-4 text-xs text-ink-400 tabular-nums">
+            생성{' '}
+            {analysis.reportGeneratedAt ? dateTime.format(new Date(analysis.reportGeneratedAt)) : '—'}
+            {analysis.reportModel && ` · ${analysis.reportModel}`}
+          </p>
+          <p className="mt-1 text-xs text-pretty text-ink-400">
+            영상이 아니라 계산된 지표만 보고 쓴 조언이라 참고용으로만 활용하세요.
+          </p>
+          {action('다시 만들기', 'secondary')}
+        </>
+      )}
+
+      {status === 'failed' && (
+        <div role="alert">
+          <p className="mt-1 text-sm font-medium text-danger-500">리포트를 만들지 못했어요</p>
+          <p className="mt-1 text-sm text-pretty text-ink-600">
+            {analysis.reportError || '리포트 생성 중 오류가 발생했습니다.'}
+          </p>
+          {action('다시 시도', 'secondary')}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function NotConfigured() {
+  return (
+    <p role="status" className="mt-3 rounded-xl bg-chalk-100 px-3 py-2 text-xs text-pretty text-ink-500">
+      리포트 기능이 아직 설정되지 않았어요. 준비되면 여기서 만들 수 있습니다.
+    </p>
   )
 }
 

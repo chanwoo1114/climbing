@@ -6,6 +6,9 @@ import type { RawCursorPage } from '@/api/gyms'
 
 export type AnalysisStatus = 'pending' | 'processing' | 'done' | 'failed'
 
+/** AI 코칭 리포트 상태 — none 은 아직 요청한 적 없음 */
+export type ReportStatus = 'none' | 'pending' | 'processing' | 'done' | 'failed'
+
 export const JOINT_NAMES = [
   'leftElbow',
   'rightElbow',
@@ -92,6 +95,16 @@ export interface VideoAnalysis {
   retryCount: number
   createdAt: string
   updatedAt: string
+  // --- AI 코칭 리포트 (분석 done 뒤 작성자가 따로 요청) ---
+  reportStatus: ReportStatus
+  /** 한국어 마크다운 (## 한눈에 보기 / 잘한 점 / 개선 포인트 / 추천 훈련 / 주의). done 이 아니면 빈 문자열 */
+  report: string
+  /** failed 일 때 사유. 그대로 보여줘도 되는 짧은 문장 */
+  reportError: string
+  reportModel: string
+  reportInputTokens: number
+  reportOutputTokens: number
+  reportGeneratedAt: string | null
 }
 
 export interface VideoAnalysisWithKeypoints extends VideoAnalysis {
@@ -136,6 +149,13 @@ function normalize(raw: RawAnalysis): VideoAnalysis {
 export const isAnalysisRunning = (analysis: VideoAnalysis | null | undefined) =>
   analysis?.status === 'pending' || analysis?.status === 'processing'
 
+export const isReportRunning = (analysis: VideoAnalysis | null | undefined) =>
+  analysis?.reportStatus === 'pending' || analysis?.reportStatus === 'processing'
+
+/** 자세 분석이든 리포트든 서버에서 뭔가 돌아가는 중 — 폴링을 계속할 조건 */
+export const isAnalysisBusy = (analysis: VideoAnalysis | null | undefined) =>
+  isAnalysisRunning(analysis) || isReportRunning(analysis)
+
 // --- API ---
 
 /** 기록의 분석 (기록당 1건). 아직 요청한 적이 없으면 null */
@@ -158,6 +178,16 @@ export async function requestAnalysis(logId: number): Promise<VideoAnalysis> {
 
 export async function fetchAnalysis(id: number): Promise<VideoAnalysis> {
   const { data } = await api.get<RawAnalysis>(`/analyses/${id}/`)
+  return normalize(data)
+}
+
+/**
+ * AI 코칭 리포트 요청 — 작성자만, 분석이 done 이어야 한다. 202 로 report_status=pending 인
+ * 분석 객체를 돌려주고 10~60초 뒤 완료된다 (폴링은 useLogAnalysis 가 이어받는다).
+ * 오류: 409 analysis_not_done · 409 report_in_progress · 503 coaching_not_configured
+ */
+export async function requestCoachingReport(id: number): Promise<VideoAnalysis> {
+  const { data } = await api.post<RawAnalysis>(`/analyses/${id}/report/`)
   return normalize(data)
 }
 
