@@ -3,6 +3,7 @@ import { useCallback, useRef, useState } from 'react'
 import { getErrorCode, getErrorMessage } from '@/api/client'
 import {
   CLIMB_VIDEO_TYPES,
+  IMAGE_TYPES,
   putFileToPresignedUrl,
   requestPresignedUpload,
   type UploadKind,
@@ -39,7 +40,12 @@ const toMB = (n: number) => `${megabytes.format(n / (1024 * 1024))}MB`
  * 파일 선택 → 형식 검사 → presigned URL 발급 → (max_bytes 검사) → S3 PUT (진행률) → fileUrl.
  * 크기 상한은 서버 응답(max_bytes)이 알려주므로 발급 뒤에 검사한다.
  */
-export function useUpload(kind: UploadKind, allowedTypes: readonly string[]) {
+export function useUpload(
+  kind: UploadKind,
+  allowedTypes: readonly string[],
+  /** 형식 검사 실패 메시지 — 기본값은 영상 기준이라 이미지 kind 는 따로 넘긴다 */
+  typeError = '지원하지 않는 형식입니다. MP4, MOV, WebM 영상만 올릴 수 있어요.',
+) {
   const [state, setState] = useState<UploadState>(INITIAL)
   const controller = useRef<AbortController | null>(null)
 
@@ -57,7 +63,7 @@ export function useUpload(kind: UploadKind, allowedTypes: readonly string[]) {
           ...INITIAL,
           status: 'error',
           fileName: file.name,
-          error: '지원하지 않는 형식입니다. MP4, MOV, WebM 영상만 올릴 수 있어요.',
+          error: typeError,
         })
         return null
       }
@@ -108,7 +114,7 @@ export function useUpload(kind: UploadKind, allowedTypes: readonly string[]) {
         if (controller.current === abort) controller.current = null
       }
     },
-    [kind, allowedTypes],
+    [kind, allowedTypes, typeError],
   )
 
   return { ...state, upload, cancel, reset: cancel }
@@ -117,4 +123,18 @@ export function useUpload(kind: UploadKind, allowedTypes: readonly string[]) {
 /** 등반 영상 전용 프리셋 */
 export function useVideoUpload() {
   return useUpload('climb_video', CLIMB_VIDEO_TYPES)
+}
+
+/** 베타 영상 (≤200MB) */
+export function useBetaVideoUpload() {
+  return useUpload('beta_video', CLIMB_VIDEO_TYPES)
+}
+
+/** 베타 썸네일 이미지 (≤5MB) */
+export function useBetaThumbnailUpload() {
+  return useUpload(
+    'beta_thumbnail',
+    IMAGE_TYPES,
+    '지원하지 않는 형식입니다. JPG, PNG, WebP 이미지만 올릴 수 있어요.',
+  )
 }

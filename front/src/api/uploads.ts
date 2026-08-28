@@ -8,10 +8,18 @@ import { api } from '@/api/client'
  * 3) 응답의 fileUrl 을 기록/프로필 API 에 저장.
  */
 
-export type UploadKind = 'profile_image' | 'post_image' | 'climb_video'
+export type UploadKind =
+  | 'profile_image'
+  | 'post_image'
+  | 'climb_video'
+  | 'beta_video'
+  | 'beta_thumbnail'
 
 /** backend UPLOAD_KINDS["climb_video"] 와 동일하게 유지 — 서버가 최종 판정 */
 export const CLIMB_VIDEO_TYPES = ['video/mp4', 'video/quicktime', 'video/webm'] as const
+
+/** backend IMAGE_TYPES — beta_thumbnail 등 이미지 kind 공통 */
+export const IMAGE_TYPES = ['image/jpeg', 'image/png', 'image/webp'] as const
 
 export interface PresignedUploadRequest {
   kind: UploadKind

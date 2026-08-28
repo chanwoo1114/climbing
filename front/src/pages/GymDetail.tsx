@@ -1,8 +1,9 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
-import { Link, useLocation, useNavigate, useParams } from 'react-router'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router'
 
 import { getErrorCode, getErrorMessage, getFieldError } from '@/api/client'
 import type { GymDetail as Gym, GymReview } from '@/api/gyms'
+import GymBetas from '@/components/betas/GymBetas'
 import Button from '@/components/common/Button'
 import { RatingInput, RatingStars } from '@/components/common/Rating'
 import TextArea from '@/components/common/TextArea'
@@ -75,107 +76,157 @@ function GymDetailView({ gym }: { gym: Gym }) {
   })}`
   const images = [...gym.images].sort((a, b) => a.order - b.order)
   const difficulties = [...gym.difficulties].sort((a, b) => a.order - b.order)
+  const [searchParams] = useSearchParams()
+  const tab = tabFromParams(searchParams)
 
   return (
-    <div className="md:grid md:grid-cols-[minmax(0,1fr)_380px] md:items-start md:gap-6">
-      <div className="space-y-4">
-        <header>
-          <h1 className="text-2xl font-semibold text-ink-700">{gym.name}</h1>
-          <p className="mt-1 text-sm text-pretty break-words text-ink-400">{gym.address}</p>
-          <div className="mt-1 flex flex-wrap items-center gap-x-4 text-sm">
-            {gym.phone && (
-              <a href={`tel:${gym.phone}`} className={CONTACT_LINK}>
-                <span aria-hidden className="mr-1">
-                  ☎
-                </span>
-                <span className="tabular-nums">{gym.phone}</span>
-              </a>
-            )}
-            {gym.website && (
-              <a href={gym.website} target="_blank" rel="noreferrer" className={CONTACT_LINK}>
-                {websiteLabel(gym.website)}
-                <span className="sr-only"> (새 창에서 열림)</span>
-              </a>
-            )}
-            <Link to={mapLink} className={CONTACT_LINK}>
-              지도에서 보기
+    <div className="space-y-4">
+      <header>
+        <h1 className="text-2xl font-semibold text-ink-700">{gym.name}</h1>
+        <p className="mt-1 text-sm text-pretty break-words text-ink-400">{gym.address}</p>
+        <div className="mt-1 flex flex-wrap items-center gap-x-4 text-sm">
+          {gym.phone && (
+            <a href={`tel:${gym.phone}`} className={CONTACT_LINK}>
+              <span aria-hidden className="mr-1">
+                ☎
+              </span>
+              <span className="tabular-nums">{gym.phone}</span>
+            </a>
+          )}
+          {gym.website && (
+            <a href={gym.website} target="_blank" rel="noreferrer" className={CONTACT_LINK}>
+              {websiteLabel(gym.website)}
+              <span className="sr-only"> (새 창에서 열림)</span>
+            </a>
+          )}
+          <Link to={mapLink} className={CONTACT_LINK}>
+            지도에서 보기
+          </Link>
+          {/* 서버가 is_manager 로 판정한 관리자에게만 관리 화면 진입점을 보여준다 */}
+          {gym.isManager && (
+            <Link to={`/gyms/${gym.id}/manage`} className={CONTACT_LINK}>
+              관리
             </Link>
+          )}
+        </div>
+      </header>
+
+      {/* 탭 상태는 URL(?tab=)에 산다 — 새로고침·공유해도 같은 탭 */}
+      <nav aria-label="암장 정보" className="inline-flex rounded-xl bg-chalk-200 p-1">
+        {TABS.map((item) => {
+          const active = item.value === tab
+          return (
+            <Link
+              key={item.value}
+              to={item.value === 'info' ? `/gyms/${gym.id}` : `/gyms/${gym.id}?tab=${item.value}`}
+              replace
+              aria-current={active ? 'page' : undefined}
+              className={`inline-flex min-h-11 items-center rounded-lg px-4 text-sm transition-colors duration-150 ${
+                active
+                  ? 'bg-white font-semibold text-ink-700'
+                  : 'font-medium text-ink-500 hover:text-ink-700'
+              }`}
+            >
+              {item.label}
+            </Link>
+          )
+        })}
+      </nav>
+
+      {tab === 'betas' && <GymBetas gym={gym} />}
+
+      {tab === 'info' && (
+        <div className="md:grid md:grid-cols-[minmax(0,1fr)_380px] md:items-start md:gap-6">
+          <div className="space-y-4">
+            <Gallery images={images} name={gym.name} />
+
+            <Section title="가격표">
+              {gym.prices.length === 0 ? (
+                <Empty>등록된 가격 정보가 없어요</Empty>
+              ) : (
+                <ul className="divide-y divide-chalk-200">
+                  {gym.prices.map((price) => (
+                    <li key={price.id} className="flex items-baseline justify-between gap-3 py-2">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium break-words text-ink-700">{price.name}</p>
+                        {price.note && (
+                          <p className="text-xs text-pretty break-words text-ink-400">{price.note}</p>
+                        )}
+                      </div>
+                      <p className="shrink-0 text-sm font-medium text-ink-700 tabular-nums">
+                        {won.format(price.price)}원
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+
+            <Section title="편의시설">
+              {gym.facilities.length === 0 ? (
+                <Empty>등록된 편의시설 정보가 없어요</Empty>
+              ) : (
+                <ul className="flex flex-wrap gap-2">
+                  {gym.facilities.map((facility) => (
+                    <li
+                      key={facility.id}
+                      className="rounded-xl bg-chalk-100 px-3 py-1.5 text-sm break-words text-ink-600"
+                    >
+                      {facility.name}
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Section>
+
+            <Section title="난이도">
+              {difficulties.length === 0 ? (
+                <Empty>등록된 난이도 정보가 없어요</Empty>
+              ) : (
+                // 색은 토큰이 아니라 암장이 정한 값(GymDifficulty.color)을 그대로 쓴다
+                <ol className="flex flex-wrap gap-x-4 gap-y-2">
+                  {difficulties.map((difficulty) => (
+                    <li key={difficulty.id} className="flex items-center gap-1.5 text-sm text-ink-600">
+                      <span
+                        aria-hidden
+                        className="size-4 shrink-0 rounded-full border border-chalk-400"
+                        style={{ backgroundColor: difficulty.color }}
+                      />
+                      {difficulty.name}
+                    </li>
+                  ))}
+                </ol>
+              )}
+            </Section>
+
+            {gym.description && (
+              <Section title="소개">
+                <p className="text-sm whitespace-pre-line text-pretty break-words text-ink-600">
+                  {gym.description}
+                </p>
+              </Section>
+            )}
           </div>
-        </header>
 
-        <Gallery images={images} name={gym.name} />
-
-        <Section title="가격표">
-          {gym.prices.length === 0 ? (
-            <Empty>등록된 가격 정보가 없어요</Empty>
-          ) : (
-            <ul className="divide-y divide-chalk-200">
-              {gym.prices.map((price) => (
-                <li key={price.id} className="flex items-baseline justify-between gap-3 py-2">
-                  <div className="min-w-0">
-                    <p className="text-sm font-medium break-words text-ink-700">{price.name}</p>
-                    {price.note && (
-                      <p className="text-xs text-pretty break-words text-ink-400">{price.note}</p>
-                    )}
-                  </div>
-                  <p className="shrink-0 text-sm font-medium text-ink-700 tabular-nums">
-                    {won.format(price.price)}원
-                  </p>
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        <Section title="편의시설">
-          {gym.facilities.length === 0 ? (
-            <Empty>등록된 편의시설 정보가 없어요</Empty>
-          ) : (
-            <ul className="flex flex-wrap gap-2">
-              {gym.facilities.map((facility) => (
-                <li
-                  key={facility.id}
-                  className="rounded-xl bg-chalk-100 px-3 py-1.5 text-sm break-words text-ink-600"
-                >
-                  {facility.name}
-                </li>
-              ))}
-            </ul>
-          )}
-        </Section>
-
-        <Section title="난이도">
-          {difficulties.length === 0 ? (
-            <Empty>등록된 난이도 정보가 없어요</Empty>
-          ) : (
-            // 색은 토큰이 아니라 암장이 정한 값(GymDifficulty.color)을 그대로 쓴다
-            <ol className="flex flex-wrap gap-x-4 gap-y-2">
-              {difficulties.map((difficulty) => (
-                <li key={difficulty.id} className="flex items-center gap-1.5 text-sm text-ink-600">
-                  <span
-                    aria-hidden
-                    className="size-4 shrink-0 rounded-full border border-chalk-400"
-                    style={{ backgroundColor: difficulty.color }}
-                  />
-                  {difficulty.name}
-                </li>
-              ))}
-            </ol>
-          )}
-        </Section>
-
-        {gym.description && (
-          <Section title="소개">
-            <p className="text-sm whitespace-pre-line text-pretty break-words text-ink-600">
-              {gym.description}
-            </p>
-          </Section>
-        )}
-      </div>
-
-      <Reviews gymId={gym.id} reviewCount={gym.reviewCount} ratingAvg={gym.ratingAvg} />
+          <Reviews gymId={gym.id} reviewCount={gym.reviewCount} ratingAvg={gym.ratingAvg} />
+        </div>
+      )}
     </div>
   )
+}
+
+// --- 탭 (정보 / 베타) ---
+
+type Tab = 'info' | 'betas'
+
+const TABS: { value: Tab; label: string }[] = [
+  { value: 'info', label: '정보' },
+  { value: 'betas', label: '베타' },
+]
+
+/** ?tab= 이 없거나 이상하면 정보 */
+function tabFromParams(params: URLSearchParams): Tab {
+  return params.get('tab') === 'betas' ? 'betas' : 'info'
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {
