@@ -372,6 +372,26 @@ function AccountMenu({ nickname }: { nickname: string }) {
           >
             크루
           </NavLink>
+          {/* 관리자가 아니면 목록 페이지가 빈 상태(관리자 지정 요청 안내)를 보여준다.
+              메뉴를 열 때마다 관리 목록을 미리 받지 않으려고 항상 노출한다. */}
+          <NavLink
+            to="/gyms/managed"
+            role="menuitem"
+            className={({ isActive }) =>
+              `${MENU_ITEM} ${isActive ? 'bg-chalk-100 text-ink-700' : 'text-ink-600 hover:bg-chalk-100'}`
+            }
+          >
+            내 암장 관리
+          </NavLink>
+          <NavLink
+            to="/settings"
+            role="menuitem"
+            className={({ isActive }) =>
+              `${MENU_ITEM} ${isActive ? 'bg-chalk-100 text-ink-700' : 'text-ink-600 hover:bg-chalk-100'}`
+            }
+          >
+            설정
+          </NavLink>
           <button
             type="button"
             role="menuitem"

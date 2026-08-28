@@ -18,11 +18,12 @@ gyms(지도 bbox 검색·`points/` 클러스터용·리뷰·암장 관리자 `Gy
 난이도/이미지/가격/편의시설/관리자 CRUD, 권한은 `gyms/services.is_gym_manager` + is_staff),
 climbs(기록·좋아요·댓글·피드·`users/{id}/logs`·`users/{id}/stats/` 통계 `climbs/stats.py`·
 베타 영상 `ClimbBeta` — `gyms/{id}/betas/`·`betas/{id}/`, 서비스는 `climbs/beta_services.py`),
-social(팔로우), community(게시판·모집·참여 — 마감 시 chat 그룹방 자동 생성),
-crews(크루·멤버·크루 채팅방·크루 피드·`{id}/stats/`·`ranking/` 월간 통계/랭킹 `crews/stats.py`),
+social(팔로우), community(게시판(`?q=` 제목·본문 검색)·모집·참여 — 마감 시 chat 그룹방 자동 생성),
+crews(크루·멤버·크루 채팅방·크루 피드·`{id}/stats/`·`ranking/` 월간 통계/랭킹 `crews/stats.py`·
+크루장 위임 `{id}/transfer/`·목록 `?region=` 홈짐 주소 필터),
 chat(REST + WebSocket `ws/chat/{room}/`, JWT 는 `?token=`),
 analysis(Celery + MediaPipe 자세 분석 + AI 코칭 리포트 `POST analyses/{id}/report/` — `analysis/coaching.py`,
-Claude API `claude-opus-5`, ANTHROPIC_API_KEY 없으면 503),
+Claude API `claude-opus-5`, ANTHROPIC_API_KEY 없으면 503; 분석/리포트 완료·실패는 notifications 훅으로 알림),
 notifications(훅 기반 알림 + `ws/notifications/` + 팬아웃: Web Push `notifications/push.py`(VAPID 키 없으면 건너뜀)·
 이메일 `notifications/emails.py`(모집/크루 결과만)·사용자 설정 `settings/`·구독 `push-subscriptions/`).
 파일 업로드는 `common` 의 presigned PUT (kind: profile_image/post_image/climb_video/beta_video/beta_thumbnail).
@@ -71,7 +72,8 @@ cd front
 npm run dev          # localhost:5180
 npm run build
 npm run typecheck    # tsc --noEmit
-npm test             # vitest (lib/validation 등 순수 로직)
+npm test             # vitest + jsdom — 순수 로직 + 컴포넌트 테스트(@testing-library, msw). 브라우저 없이 검증
+npx vitest run src/pages/Settings.test.tsx   # 파일 단위
 ```
 
 소스는 볼륨 마운트되어 있어 코드 수정이 즉시 반영된다 (web=runserver 자동 리로드,
@@ -125,6 +127,9 @@ LAN IP 나 공인 IP 로 접속하면 WebSocket 이 `AllowedHostsOriginValidator
 - 토큰: access는 메모리(store), refresh는 별도 저장 전략 — 변경 시 `authStore` 주석 참고
 - 스타일은 Tailwind 유틸리티 클래스, 공통 컴포넌트는 `components/common/`
 - WebSocket은 `useChatSocket` 훅으로만 접근
+- 화면 검증은 브라우저 대신 컴포넌트 테스트로 (2026-08-28~): `src/test/render.tsx` 의 `renderWithProviders(ui, {route, path, user: ME})`
+  + `src/test/server.ts` 의 msw 헬퍼(`server.use(http.get(API('/x/'), () => ok({...})))`, `fail`, `page`). 핸들러 본문은 snake_case.
+  새 페이지마다 정상·오류·빈 상태 테스트를 같은 폴더에 `*.test.tsx` 로. 본보기는 `src/test/infra.test.tsx`
 - "페이지 열리면 바로 서버 호출"(링크 토큰 검증 등)은 `useEffect`+`mutate()`가 아니라 `useQuery`로.
   StrictMode(dev) 가짜 리마운트 때 mutation 관찰자가 떨어져 결과가 화면에 안 반영된다 (VerifyEmail 사례)
 

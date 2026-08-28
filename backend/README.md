@@ -55,7 +55,7 @@ DB 툴(PyCharm 등)의 public 스키마에서 각 테이블 용도가 보이도�
 - 우리 모델: `Meta.db_table_comment` + 필드 `db_comment=` → 마이그레이션에 자동 반영
 - Django/서드파티 내장 테이블(auth, session, token_blacklist 등):
   `common/migrations/0001_table_comments.py` 에서 `COMMENT ON TABLE` 로 직접 관리
-- PostGIS geometry 컬럼은 AlterField 로 코멘트가 반영되지 않아 `gyms/migrations/0003` 에서 SQL 로 처리
+- PostGIS geometry 컬럼은 AlterField 로 코멘트가 반영되지 않아 `gyms/migrations/0002_location_column_comment.py` 에서 SQL 로 처리
 
 새 모델을 만들 때 `db_table_comment` 를 함께 적는다.
 

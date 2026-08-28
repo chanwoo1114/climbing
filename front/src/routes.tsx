@@ -2,18 +2,23 @@ import { createBrowserRouter } from 'react-router'
 
 import RequireAuth from '@/components/common/RequireAuth'
 import RootLayout from '@/components/common/RootLayout'
+import BetaCreate from '@/pages/BetaCreate'
+import BetaDetail from '@/pages/BetaDetail'
 import ChatRoom from '@/pages/ChatRoom'
 import ChatRooms from '@/pages/ChatRooms'
 import CrewCreate from '@/pages/CrewCreate'
 import CrewDetail from '@/pages/CrewDetail'
 import CrewList from '@/pages/CrewList'
+import CrewRanking from '@/pages/CrewRanking'
 import Feed from '@/pages/Feed'
 import ForgotPassword from '@/pages/ForgotPassword'
 import GymDetail from '@/pages/GymDetail'
+import GymManage from '@/pages/GymManage'
 import KakaoCallback from '@/pages/KakaoCallback'
 import LogCreate from '@/pages/LogCreate'
 import LogDetail from '@/pages/LogDetail'
 import Login from '@/pages/Login'
+import ManagedGyms from '@/pages/ManagedGyms'
 import MapHome from '@/pages/MapHome'
 import MyLogs from '@/pages/MyLogs'
 import NotFound from '@/pages/NotFound'
@@ -23,6 +28,7 @@ import PostDetail from '@/pages/PostDetail'
 import PostList from '@/pages/PostList'
 import Profile from '@/pages/Profile'
 import ResetPassword from '@/pages/ResetPassword'
+import Settings from '@/pages/Settings'
 import Signup from '@/pages/Signup'
 import SignupSent from '@/pages/SignupSent'
 import UserFollowList from '@/pages/UserFollowList'
@@ -45,6 +51,8 @@ export const router = createBrowserRouter([
           { index: true, element: <MapHome /> },
           // 암장 상세 + 리뷰 읽기는 공개. 리뷰 작성만 페이지 안에서 로그인 여부를 본다.
           { path: 'gyms/:id', element: <GymDetail /> },
+          // 베타 영상 읽기는 공개 (조회수는 서버가 올린다). 작성·수정은 아래 RequireAuth 안
+          { path: 'betas/:betaId', element: <BetaDetail /> },
           { path: 'login', element: <Login /> },
           { path: 'signup', element: <Signup /> },
           { path: 'signup/sent', element: <SignupSent /> },
@@ -59,12 +67,21 @@ export const router = createBrowserRouter([
             element: <RequireAuth />,
             children: [
               { path: 'profile', element: <Profile /> },
+              // 계정 설정 — 알림·푸시 구독·비밀번호 변경·회원 탈퇴
+              { path: 'settings', element: <Settings /> },
+              // 암장 관리자 — 내가 관리하는 암장 목록과 관리 화면.
+              // 'gyms/managed' 는 정적 세그먼트라 위의 공개 라우트 'gyms/:id' 보다 먼저 매칭된다.
+              { path: 'gyms/managed', element: <ManagedGyms /> },
+              { path: 'gyms/:id/manage', element: <GymManage /> },
               // 피드·기록은 로그인 전용 (남의 비공개 기록은 서버가 404 로 숨긴다)
               { path: 'feed', element: <Feed /> },
               { path: 'logs', element: <MyLogs /> },
               { path: 'logs/new', element: <LogCreate /> },
               { path: 'logs/:id', element: <LogDetail /> },
               { path: 'logs/:id/edit', element: <LogCreate /> },
+              // 베타 영상 올리기·수정 — 한 컴포넌트가 :gymId(생성) / :betaId(수정) 로 갈린다
+              { path: 'gyms/:gymId/betas/new', element: <BetaCreate /> },
+              { path: 'betas/:betaId/edit', element: <BetaCreate /> },
               // 게시판 — 목록·상세·댓글·모집 참여 모두 로그인 전용 API
               { path: 'posts', element: <PostList /> },
               { path: 'posts/new', element: <PostCreate /> },
@@ -81,6 +98,8 @@ export const router = createBrowserRouter([
               // 크루 — 목록·상세·생성·설정 모두 로그인 전용 API
               { path: 'crews', element: <CrewList /> },
               { path: 'crews/new', element: <CrewCreate /> },
+              // 정적 세그먼트가 :id 보다 우선하지만, 'ranking' 이 id 로 잡히지 않게 앞에 둔다
+              { path: 'crews/ranking', element: <CrewRanking /> },
               { path: 'crews/:id', element: <CrewDetail /> },
               { path: 'crews/:id/edit', element: <CrewCreate /> },
               // 알림 — 로그인 전용 (WebSocket 은 useNotificationSocket 훅만, RootLayout 에서 한 번)
