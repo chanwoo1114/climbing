@@ -31,6 +31,8 @@ UPLOAD_KINDS: dict[str, UploadKind] = {
     "profile_image": UploadKind(IMAGE_TYPES, 5 * MB),
     "post_image": UploadKind(IMAGE_TYPES, 10 * MB),
     "climb_video": UploadKind(VIDEO_TYPES, 200 * MB),
+    "beta_video": UploadKind(VIDEO_TYPES, 200 * MB),
+    "beta_thumbnail": UploadKind(IMAGE_TYPES, 5 * MB),
 }
 
 

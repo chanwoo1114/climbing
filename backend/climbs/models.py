@@ -114,3 +114,69 @@ class ClimbLogComment(BaseModel):
 
     def __str__(self):
         return f"comment {self.id} on {self.climb_log_id}"
+
+
+BETA_DESCRIPTION_MAX_LENGTH = 1000
+BETA_SECTOR_MAX_LENGTH = 50
+
+
+class ClimbBeta(BaseModel):
+    """암장 섹터별 베타(문제 풀이) 영상. 조회는 공개, 작성·수정·삭제는 올린 사람만.
+
+    섹터는 세팅 때마다 바뀌므로 별도 테이블 없이 자유 문자열로 둔다.
+    """
+
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="climb_betas",
+        db_comment="올린 회원 FK",
+    )
+    gym = models.ForeignKey(
+        "gyms.Gym",
+        on_delete=models.CASCADE,
+        related_name="betas",
+        db_comment="암장 FK",
+    )
+    # 난이도는 자유 문자열 금지 → 같은 암장의 GymDifficulty 만 허용 (serializer 검증)
+    difficulty = models.ForeignKey(
+        "gyms.GymDifficulty",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="betas",
+        db_comment="난이도 FK (암장별 색 난이도). 암장이 난이도를 지우면 NULL",
+    )
+    sector = models.CharField(
+        max_length=BETA_SECTOR_MAX_LENGTH,
+        blank=True,
+        db_comment="섹터/벽 이름 (예: A섹터, 슬랩 벽) — 자유 문자열, 세팅마다 바뀜",
+    )
+    title = models.CharField(max_length=100, db_comment="베타 제목")
+    description = models.TextField(blank=True, db_comment="설명 (최대 1000자)")
+    video_url = models.URLField(
+        db_comment="베타 영상 URL (S3, presigned URL 로 직접 업로드). 생성 후 변경 불가"
+    )
+    thumbnail_url = models.URLField(blank=True, db_comment="썸네일 이미지 URL (S3)")
+    climb_log = models.ForeignKey(
+        ClimbLog,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="betas",
+        db_comment="연결된 본인 등반 기록 FK (선택, 같은 암장 기록만)",
+    )
+    view_count = models.PositiveIntegerField(
+        default=0, db_comment="조회수 — 상세 조회 때마다 F() 로 원자적 증가"
+    )
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["gym", "-created_at"]),
+            models.Index(fields=["gym", "sector"]),
+            models.Index(fields=["user", "-created_at"]),
+        ]
+        db_table_comment = "암장 섹터별 베타 영상 — 섹터/난이도/제목/영상. 조회는 공개"
+
+    def __str__(self):
+        return f"beta {self.id}: {self.title} @ {self.gym_id}"

@@ -2,14 +2,25 @@ from django.contrib.auth import get_user_model
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework import generics, status
 from rest_framework.exceptions import PermissionDenied, ValidationError
+from rest_framework.permissions import AllowAny, IsAuthenticatedOrReadOnly
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from climbs.models import ClimbLog, ClimbLogComment
+from climbs.beta_services import (
+    annotated_betas,
+    beta_sectors,
+    gym_betas,
+    increment_view_count,
+)
+from climbs.models import ClimbBeta, ClimbLog, ClimbLogComment
 from climbs.serializers import (
+    BetaSectorSerializer,
+    ClimbBetaSerializer,
+    ClimbBetaWriteSerializer,
     ClimbLogCommentSerializer,
     ClimbLogSerializer,
     ClimbLogWriteSerializer,
+    UserStatsSerializer,
 )
 from climbs.services import (
     annotated_logs,
@@ -19,7 +30,9 @@ from climbs.services import (
     unlike_log,
     visible_logs,
 )
+from climbs.stats import user_stats
 from common.pagination import DefaultCursorPagination
+from gyms.models import Gym
 
 FEED_SCOPES = ("explore", "following")
 
@@ -193,3 +206,136 @@ class UserLogListView(generics.ListAPIView):
             get_user_model().objects, pk=self.kwargs["user_id"]
         )
         return visible_logs(self.request.user).filter(user=owner)
+
+
+@extend_schema(tags=["climbs"], responses=UserStatsSerializer)
+class UserStatsView(APIView):
+    """회원 통계 (프로필용) — 성공률·난이도 분포·월별 추이·자주 간 암장.
+
+    본인이면 전체 기록, 타인이면 공개(is_shared) 기록만 집계한다. 탈퇴 회원은 404.
+    """
+
+    def get(self, request, user_id):
+        owner = generics.get_object_or_404(get_user_model().objects, pk=user_id)
+        return Response(user_stats(owner, request.user))
+
+
+# ---- 베타 영상 (ClimbBeta) ---------------------------------------------------------
+
+
+def _get_gym(gym_id) -> Gym:
+    return generics.get_object_or_404(Gym, pk=gym_id)
+
+
+@extend_schema(
+    tags=["betas"],
+    parameters=[
+        OpenApiParameter("sector", str, description="섹터 이름 (대소문자 무시 일치)"),
+        OpenApiParameter("difficulty", int, description="난이도 id 필터"),
+        OpenApiParameter("q", str, description="제목 검색 (부분 일치)"),
+    ],
+)
+class GymBetaListCreateView(generics.ListCreateAPIView):
+    """암장 베타 영상 목록(커서, 최신순) — 조회는 공개, 올리기는 로그인 필요.
+
+    영상은 먼저 `POST /uploads/presigned-url/` (kind=beta_video / beta_thumbnail) 로
+    직접 업로드한 뒤 그 file_url 을 video_url / thumbnail_url 로 보낸다.
+    """
+
+    queryset = ClimbBeta.objects.none()  # 스키마 생성용 — 실제 조회는 get_queryset
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_serializer_class(self):
+        if self.request.method == "POST":
+            return ClimbBetaWriteSerializer
+        return ClimbBetaSerializer
+
+    def get_gym(self) -> Gym:
+        if not hasattr(self, "_gym"):
+            self._gym = _get_gym(self.kwargs["gym_id"])
+        return self._gym
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        context["gym"] = self.get_gym()
+        return context
+
+    def get_queryset(self):
+        params = self.request.query_params
+        difficulty_id = params.get("difficulty")
+        if difficulty_id is not None and not difficulty_id.isdigit():
+            raise ValidationError({"difficulty": "difficulty 는 정수 id 입니다."})
+        return gym_betas(
+            self.get_gym(),
+            sector=params.get("sector"),
+            difficulty_id=int(difficulty_id) if difficulty_id else None,
+            q=params.get("q"),
+        )
+
+    @extend_schema(
+        request=ClimbBetaWriteSerializer, responses={201: ClimbBetaSerializer}
+    )
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        beta = serializer.save(user=request.user, gym=self.get_gym())
+        data = ClimbBetaSerializer(
+            annotated_betas().get(pk=beta.pk), context=self.get_serializer_context()
+        ).data
+        return Response(data, status=status.HTTP_201_CREATED)
+
+
+@extend_schema(tags=["betas"], responses=BetaSectorSerializer(many=True))
+class GymBetaSectorListView(APIView):
+    """암장의 섹터 목록 + 섹터별 베타 개수 (개수 내림차순 → 이름순). 페이지네이션 없음."""
+
+    permission_classes = [AllowAny]
+
+    def get(self, request, gym_id):
+        return Response(beta_sectors(_get_gym(gym_id)))
+
+
+@extend_schema(tags=["betas"])
+class ClimbBetaDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """베타 상세(공개, 조회수 +1) / 수정·삭제(올린 사람만, soft delete).
+
+    수정 가능: title, sector, difficulty, description, thumbnail_url, climb_log.
+    video_url 은 생성 후 변경 불가 — 보내면 400.
+    """
+
+    http_method_names = ["get", "patch", "delete", "head", "options"]
+    permission_classes = [IsAuthenticatedOrReadOnly]
+
+    def get_serializer_class(self):
+        if self.request.method == "PATCH":
+            return ClimbBetaWriteSerializer
+        return ClimbBetaSerializer
+
+    def get_queryset(self):
+        return annotated_betas()
+
+    def get_object(self):
+        beta = super().get_object()
+        is_write = self.request.method in ("PATCH", "DELETE")
+        if is_write and beta.user_id != self.request.user.id:
+            raise PermissionDenied("본인이 올린 베타만 수정·삭제할 수 있습니다.")
+        return beta
+
+    def retrieve(self, request, *args, **kwargs):
+        beta = self.get_object()
+        increment_view_count(beta)
+        return Response(self.get_serializer(beta).data)
+
+    @extend_schema(request=ClimbBetaWriteSerializer, responses=ClimbBetaSerializer)
+    def partial_update(self, request, *args, **kwargs):
+        beta = self.get_object()
+        context = {**self.get_serializer_context(), "gym": beta.gym}
+        serializer = ClimbBetaWriteSerializer(
+            beta, data=request.data, partial=True, context=context
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        data = ClimbBetaSerializer(
+            annotated_betas().get(pk=beta.pk), context=context
+        ).data
+        return Response(data)

@@ -2,7 +2,7 @@
 
 from django.contrib.gis.geos import Point
 
-from climbs.models import ClimbLog
+from climbs.models import ClimbBeta, ClimbLog
 from gyms.models import Gym, GymDifficulty
 
 
@@ -20,3 +20,13 @@ def create_log(user, gym: Gym, **kwargs) -> ClimbLog:
     defaults = {"is_success": True, "attempts": 2, "memo": "기록", "is_shared": True}
     defaults.update(kwargs)
     return ClimbLog.objects.create(user=user, gym=gym, **defaults)
+
+
+def create_beta(user, gym: Gym, **kwargs) -> ClimbBeta:
+    defaults = {
+        "title": "베타",
+        "sector": "A섹터",
+        "video_url": "https://cdn.example.com/beta_video/1/a.mp4",
+    }
+    defaults.update(kwargs)
+    return ClimbBeta.objects.create(user=user, gym=gym, **defaults)
