@@ -250,3 +250,60 @@ class CrewMemberUpdateSerializer(serializers.Serializer):
                 {"detail": "status 또는 role 중 하나만 보내야 합니다."}
             )
         return attrs
+
+
+# ---- 통계 / 랭킹 (crews/stats.py 결과 — 읽기 전용 스키마) ---------------------
+
+
+class MonthQuerySerializer(serializers.Serializer):
+    """?month=YYYY-MM (없으면 이번 달). 파싱은 climbs.stats.parse_month."""
+
+    month = serializers.CharField(required=False, help_text="YYYY-MM, 기본 이번 달")
+
+
+class RankedUserSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    nickname = serializers.CharField()
+    image = serializers.CharField(allow_null=True)
+
+
+class CrewMemberRankSerializer(serializers.Serializer):
+    rank = serializers.IntegerField(help_text="동점은 같은 순위 (1,1,3)")
+    user = RankedUserSerializer()
+    log_count = serializers.IntegerField()
+    success_count = serializers.IntegerField()
+
+
+class CrewStatsSerializer(serializers.Serializer):
+    """크루 월간 통계 — 활동 중 크루원들의 공개 기록만 집계."""
+
+    month = serializers.CharField(help_text="YYYY-MM")
+    member_count = serializers.IntegerField(help_text="활동 중 크루원 수")
+    active_member_count = serializers.IntegerField(
+        help_text="이 달 기록이 있는 크루원 수"
+    )
+    log_count = serializers.IntegerField()
+    success_count = serializers.IntegerField()
+    success_rate = serializers.FloatField(help_text="0~100")
+    gym_count = serializers.IntegerField()
+    ranking = CrewMemberRankSerializer(many=True, help_text="완등 수 순 상위 10명")
+
+
+class RankedGymSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+
+
+class RankedCrewSerializer(serializers.Serializer):
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    image = serializers.CharField(allow_null=True)
+    home_gym = RankedGymSerializer(allow_null=True)
+
+
+class CrewRankSerializer(serializers.Serializer):
+    rank = serializers.IntegerField(help_text="동점은 같은 순위 (1,1,3)")
+    crew = RankedCrewSerializer()
+    member_count = serializers.IntegerField()
+    log_count = serializers.IntegerField()
+    success_count = serializers.IntegerField()

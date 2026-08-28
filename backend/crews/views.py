@@ -10,11 +10,14 @@ from common.pagination import DefaultCursorPagination
 from community.models import Post
 from community.serializers import PostListSerializer
 from crews.models import Crew, CrewMember
+from climbs.stats import parse_month
 from crews.serializers import (
     CrewListSerializer,
     CrewMemberSerializer,
     CrewMemberUpdateSerializer,
+    CrewRankSerializer,
     CrewSerializer,
+    CrewStatsSerializer,
     CrewWriteSerializer,
 )
 from crews.services import (
@@ -29,6 +32,12 @@ from crews.services import (
     leave_crew,
     set_member_role,
     set_member_status,
+)
+from crews.stats import (
+    CREW_RANKING_DEFAULT_LIMIT,
+    CREW_RANKING_MAX_LIMIT,
+    crew_ranking,
+    crew_stats,
 )
 
 
@@ -259,6 +268,15 @@ class CrewMemberDetailView(APIView):
 
 
 @extend_schema(tags=["crews"])
+def _require_feed_access(crew: Crew, user) -> None:
+    """크루 피드/통계 — 크루원(활동 중)만, 또는 is_feed_public 이면 누구나."""
+    if crew.is_feed_public:
+        return
+    membership = get_membership(crew, user)
+    if membership is None or membership.status != CrewMember.Status.ACTIVE:
+        raise PermissionDenied("크루원만 볼 수 있는 피드입니다.")
+
+
 class CrewFeedView(generics.ListAPIView):
     """크루 피드 — 활동 중인 크루원들의 공개 기록. 크루원만, 또는 is_feed_public 이면 누구나."""
 
@@ -267,11 +285,59 @@ class CrewFeedView(generics.ListAPIView):
 
     def get_queryset(self):
         crew = _get_crew(self.kwargs["pk"])
-        if not crew.is_feed_public:
-            membership = get_membership(crew, self.request.user)
-            if membership is None or membership.status != CrewMember.Status.ACTIVE:
-                raise PermissionDenied("크루원만 볼 수 있는 피드입니다.")
+        _require_feed_access(crew, self.request.user)
         return crew_feed(crew, self.request.user)
+
+
+MONTH_PARAMETER = OpenApiParameter(
+    "month", str, description="YYYY-MM (기본 이번 달, Asia/Seoul)"
+)
+
+
+@extend_schema(
+    tags=["crews"], parameters=[MONTH_PARAMETER], responses=CrewStatsSerializer
+)
+class CrewStatsView(APIView):
+    """크루 월간 통계 — 완등 수/성공률/암장 수 + 크루원 활동 랭킹. 권한은 크루 피드와 동일."""
+
+    def get(self, request, pk):
+        crew = _get_crew(pk)
+        _require_feed_access(crew, request.user)
+        return Response(
+            crew_stats(crew, parse_month(request.query_params.get("month")))
+        )
+
+
+@extend_schema(
+    tags=["crews"],
+    parameters=[
+        MONTH_PARAMETER,
+        OpenApiParameter(
+            "limit",
+            int,
+            description=(
+                f"상위 몇 개 (기본 {CREW_RANKING_DEFAULT_LIMIT}, "
+                f"최대 {CREW_RANKING_MAX_LIMIT})"
+            ),
+        ),
+    ],
+    responses=CrewRankSerializer(many=True),
+)
+class CrewRankingView(APIView):
+    """전체 크루 랭킹 — 그 달 활동 중 크루원들의 공개 완등 수 순. 페이지네이션 없음."""
+
+    def get(self, request):
+        first_day = parse_month(request.query_params.get("month"))
+        raw_limit = request.query_params.get("limit")
+        try:
+            limit = int(raw_limit) if raw_limit else CREW_RANKING_DEFAULT_LIMIT
+        except ValueError:
+            raise ValidationError({"limit": ["limit 은 정수여야 합니다."]})
+        if not 1 <= limit <= CREW_RANKING_MAX_LIMIT:
+            raise ValidationError(
+                {"limit": [f"limit 은 1~{CREW_RANKING_MAX_LIMIT} 사이여야 합니다."]}
+            )
+        return Response(crew_ranking(first_day, limit))
 
 
 @extend_schema(tags=["crews"])
