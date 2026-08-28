@@ -134,6 +134,8 @@ export interface PostCommentInput {
 export interface PostListParams {
   category?: PostCategory
   gym?: number
+  /** 제목·내용 부분 일치 검색어. category/gym 과 함께 쓸 수 있다 */
+  q?: string
 }
 
 export const TITLE_MAX_LENGTH = 100

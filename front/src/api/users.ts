@@ -80,6 +80,54 @@ export async function searchUsers(q: string, cursor?: string): Promise<CursorPag
   return toPage(data)
 }
 
+// --- 통계 (GET users/{id}/stats/ — climbs.stats) ---
+
+/** "YYYY-MM" 한 달치 집계 */
+export interface UserStatsMonth {
+  month: string
+  totalCount: number
+  successCount: number
+}
+
+/** 암장 × 난이도별 집계. difficulty.color 는 DB 값 — 그대로 렌더링한다 */
+export interface UserStatsDifficulty {
+  gym: { id: number; name: string }
+  difficulty: { id: number; name: string; color: string; order: number }
+  totalCount: number
+  successCount: number
+  /** 0~100, 소수 1자리 */
+  successRate: number
+}
+
+export interface UserStatsGym {
+  gym: { id: number; name: string }
+  totalCount: number
+  successCount: number
+}
+
+/**
+ * 회원 등반 통계. 본인이면 전체 기록, 타인이면 공개 기록만 집계된다 (서버가 정한다).
+ * byMonth 는 최근 12개월, 오래된 달부터, 기록 없는 달은 0 으로 채워져 온다.
+ */
+export interface UserStats {
+  totalCount: number
+  successCount: number
+  /** 0~100, 소수 1자리 */
+  successRate: number
+  gymCount: number
+  /** 시도 횟수를 적은 기록이 없으면 null */
+  avgAttempts: number | null
+  thisMonth: UserStatsMonth
+  byMonth: UserStatsMonth[]
+  byDifficulty: UserStatsDifficulty[]
+  topGyms: UserStatsGym[]
+}
+
+export async function fetchUserStats(id: number): Promise<UserStats> {
+  const { data } = await api.get<UserStats>(`/users/${id}/stats/`)
+  return data
+}
+
 /** 회원의 기록 — 본인이면 비공개 포함, 타인이면 공개 기록만 (서버가 거른다) */
 export async function fetchUserLogs(id: number, cursor?: string): Promise<CursorPage<ClimbLog>> {
   const { data } = await api.get<RawCursorPage<ClimbLog>>(`/users/${id}/logs/`, {

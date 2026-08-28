@@ -160,15 +160,51 @@ export default function Notifications() {
   )
 }
 
-/** 행위자가 없는 시스템 알림(모집 마감·승인 등)의 자리 표시 아이콘 */
+/** 종류별 짧은 라벨 — 시간 옆에 붙는다. 서버가 새 type 을 내려도 기본값으로 렌더된다 */
+const TYPE_LABEL: Record<NotificationType, string> = {
+  like: '좋아요',
+  comment: '댓글',
+  reply: '답글',
+  follow: '팔로우',
+  recruitment_closed: '모집 마감',
+  recruitment_approved: '참여 승인',
+  recruitment_rejected: '참여 거절',
+  crew_approved: '크루 가입 승인',
+  crew_rejected: '크루 가입 거절',
+  crew_joined: '크루 가입',
+  crew_owner: '크루장 위임',
+  analysis_done: '분석 완료',
+  analysis_failed: '분석 실패',
+  report_done: '리포트 완료',
+  report_failed: '리포트 실패',
+}
+
+export function typeLabel(type: string): string {
+  return (TYPE_LABEL as Record<string, string>)[type] ?? '알림'
+}
+
+/** 행위자가 없는 시스템 알림(모집 마감·승인·분석 결과 등)의 자리 표시 아이콘 */
 function TypeIcon({ type }: { type: NotificationType }) {
   let path: string
   let tone: string
   switch (type) {
     case 'recruitment_approved':
     case 'crew_approved':
+    case 'analysis_done':
+    case 'report_done':
       path = 'm5 12.5 4.5 4.5L19 7.5'
       tone = 'bg-moss-100 text-moss-500'
+      break
+    case 'analysis_failed':
+    case 'report_failed':
+      // 경고 삼각형 — 오류 전용 danger
+      path = 'M12 4 2.5 20h19L12 4zM12 10v4M12 17.5v.5'
+      tone = 'bg-danger-100 text-danger-500'
+      break
+    case 'crew_owner':
+      // 왕관
+      path = 'M4 18h16M4 18 3 8l5 4 4-6 4 6 5-4-1 10'
+      tone = 'bg-ochre-100 text-ochre-500'
       break
     case 'recruitment_rejected':
     case 'crew_rejected':
@@ -245,12 +281,13 @@ function NotificationRow({ notification }: { notification: Notification }) {
             {unread && <span className="sr-only">안 읽음: </span>}
             {notification.message}
           </p>
-          <time
-            dateTime={notification.createdAt}
-            className="mt-0.5 block text-xs text-ink-400 tabular-nums"
-          >
-            {formatRelativeDate(notification.createdAt)}
-          </time>
+          <p className="mt-0.5 text-xs text-ink-400">
+            <span>{typeLabel(notification.type)}</span>
+            <span aria-hidden> · </span>
+            <time dateTime={notification.createdAt} className="tabular-nums">
+              {formatRelativeDate(notification.createdAt)}
+            </time>
+          </p>
         </div>
         {unread && (
           <span aria-hidden className="size-2 shrink-0 rounded-full bg-hold-500" />

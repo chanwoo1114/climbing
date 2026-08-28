@@ -1,9 +1,10 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router'
 
 import { getErrorMessage } from '@/api/client'
 import type { PostCategory, PostListParams } from '@/api/posts'
 import Button from '@/components/common/Button'
+import TextField from '@/components/common/TextField'
 import PostCard from '@/components/community/PostCard'
 import { useGym } from '@/hooks/useGyms'
 import { usePosts } from '@/hooks/usePosts'
@@ -28,24 +29,69 @@ function gymFromParams(params: URLSearchParams): number | null {
   return Number.isInteger(value) && value > 0 ? value : null
 }
 
-/** 탭·암장 필터 상태는 URL 에 산다 — 새로고침·공유해도 같은 화면 */
-function searchFor(tab: Tab, gym: number | null): string {
+/** ?q= 검색어 — 앞뒤 공백 제거, 없으면 빈 문자열 */
+function queryFromParams(params: URLSearchParams): string {
+  return params.get('q')?.trim() ?? ''
+}
+
+const SEARCH_DEBOUNCE_MS = 300
+
+/** 탭·암장·검색어 필터 상태는 URL 에 산다 — 새로고침·공유해도 같은 화면 */
+function searchFor(tab: Tab, gym: number | null, q = ''): string {
   const params = new URLSearchParams()
   if (tab !== 'all') params.set('category', tab)
   if (gym !== null) params.set('gym', String(gym))
+  if (q) params.set('q', q)
   const query = params.toString()
   return query ? `?${query}` : ''
 }
 
 export default function PostList() {
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const tab = tabFromParams(searchParams)
   const gymId = gymFromParams(searchParams)
+  const q = queryFromParams(searchParams)
+
+  // 검색 입력은 로컬 상태, 300ms 뒤 ?q= 에 반영하고 쿼리는 URL 값으로 돈다 (UserSearch 와 같은 방식)
+  const [input, setInput] = useState(q)
+  useEffect(() => {
+    const next = input.trim()
+    if (next === q) return
+    const timer = setTimeout(() => {
+      setSearchParams(
+        (prev) => {
+          const merged = new URLSearchParams(prev)
+          if (next) merged.set('q', next)
+          else merged.delete('q')
+          return merged
+        },
+        { replace: true },
+      )
+    }, SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(timer)
+  }, [input, q, setSearchParams])
+  // URL → 입력 (뒤로가기 등으로 바깥에서 바뀐 경우만)
+  useEffect(() => {
+    setInput((current) => (current.trim() === q ? current : q))
+  }, [q])
+
+  const clearSearch = () => {
+    setInput('')
+    setSearchParams(
+      (prev) => {
+        const merged = new URLSearchParams(prev)
+        merged.delete('q')
+        return merged
+      },
+      { replace: true },
+    )
+  }
 
   const params: PostListParams = {
     ...(tab !== 'all' ? { category: tab } : {}),
     ...(gymId !== null ? { gym: gymId } : {}),
+    ...(q ? { q } : {}),
   }
   const posts = usePosts(params)
   const items = posts.data?.pages.flatMap((page) => page.results) ?? []
@@ -82,6 +128,31 @@ export default function PostList() {
         <Button onClick={() => navigate(createPath)}>글쓰기</Button>
       </div>
 
+      <form
+        role="search"
+        noValidate
+        onSubmit={(e) => e.preventDefault()}
+        className="mb-4 flex items-end gap-2"
+      >
+        <div className="min-w-0 flex-1">
+          <TextField
+            label="검색"
+            name="q"
+            type="search"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="제목·내용으로 검색"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+          />
+        </div>
+        {(input || q) && (
+          <Button variant="secondary" onClick={clearSearch} aria-label="검색어 지우기">
+            지우기
+          </Button>
+        )}
+      </form>
+
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <nav aria-label="게시글 종류" className="inline-flex rounded-xl bg-chalk-200 p-1">
           {TABS.map((item) => {
@@ -89,7 +160,7 @@ export default function PostList() {
             return (
               <Link
                 key={item.value}
-                to={`/posts${searchFor(item.value, gymId)}`}
+                to={`/posts${searchFor(item.value, gymId, q)}`}
                 replace
                 aria-current={active ? 'page' : undefined}
                 className={`inline-flex min-h-11 items-center rounded-lg px-3 text-sm transition-colors duration-150 sm:px-4 ${
@@ -106,7 +177,7 @@ export default function PostList() {
 
         {gymId !== null && (
           <Link
-            to={`/posts${searchFor(tab, null)}`}
+            to={`/posts${searchFor(tab, null, q)}`}
             replace
             aria-label={`${gym.data?.name ?? '암장'} 필터 해제`}
             className="inline-flex min-h-11 max-w-full items-center gap-1.5 rounded-xl border border-chalk-300 bg-white px-3 text-sm font-medium text-ink-600 transition-colors duration-150 hover:bg-chalk-100"
@@ -137,7 +208,13 @@ export default function PostList() {
       )}
 
       {posts.data && items.length === 0 && (
-        <EmptyPosts tab={tab} filteredByGym={gymId !== null} createPath={createPath} />
+        <EmptyPosts
+          tab={tab}
+          filteredByGym={gymId !== null}
+          q={q}
+          createPath={createPath}
+          clearSearchPath={`/posts${searchFor(tab, gymId)}`}
+        />
       )}
 
       {items.length > 0 && (
@@ -186,13 +263,37 @@ const EMPTY: Record<Tab, { title: string; hint: string; action: string }> = {
 function EmptyPosts({
   tab,
   filteredByGym,
+  q,
   createPath,
+  clearSearchPath,
 }: {
   tab: Tab
   filteredByGym: boolean
+  q: string
   createPath: string
+  /** 검색어만 지우고 탭·암장 필터는 유지하는 경로 */
+  clearSearchPath: string
 }) {
   const copy = EMPTY[tab]
+
+  if (q) {
+    return (
+      <div className="rounded-card border border-chalk-300 bg-white p-8 text-center">
+        <p className="text-sm font-medium text-pretty break-words text-ink-600">
+          '{q}' 검색 결과가 없어요
+        </p>
+        <p className="mt-1 text-xs text-pretty text-ink-400">다른 검색어로 다시 찾아보세요.</p>
+        <Link
+          to={clearSearchPath}
+          replace
+          className="mt-3 inline-flex min-h-11 items-center px-3 text-sm font-medium text-hold-600 hover:underline"
+        >
+          검색 지우기
+        </Link>
+      </div>
+    )
+  }
+
   return (
     <div className="rounded-card border border-chalk-300 bg-white p-8 text-center">
       <p className="text-sm font-medium text-ink-600">

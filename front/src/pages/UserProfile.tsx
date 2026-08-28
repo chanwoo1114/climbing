@@ -5,6 +5,7 @@ import type { UserProfile as Profile } from '@/api/users'
 import LogList from '@/components/climbs/LogList'
 import Avatar from '@/components/common/Avatar'
 import Button from '@/components/common/Button'
+import UserStatsPanel from '@/components/users/UserStatsPanel'
 import { useOpenDirectRoom } from '@/hooks/useChat'
 import { useToggleFollow, useUser, useUserLogs } from '@/hooks/useUsers'
 
@@ -61,6 +62,9 @@ function ProfileView({ user }: { user: Profile }) {
   return (
     <div className="mx-auto max-w-xl">
       <ProfileHeader user={user} />
+
+      {/* 본인이면 전체, 타인이면 공개 기록만 집계 — 서버가 정한다 */}
+      <UserStatsPanel userId={user.id} />
 
       <section aria-labelledby="logs-heading" className="mt-6">
         <div className="mb-3 flex items-center justify-between gap-3">

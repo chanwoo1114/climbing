@@ -14,6 +14,7 @@ import {
   fetchFollowing,
   fetchUser,
   fetchUserLogs,
+  fetchUserStats,
   followUser,
   searchUsers,
   unfollowUser,
@@ -27,12 +28,14 @@ import type { CursorPage } from '@/api/gyms'
  * - ['users', id]                 공개 프로필
  * - ['users', id, 'followers']    팔로워 (무한)
  * - ['users', id, 'following']    팔로잉 (무한)
+ * - ['users', id, 'stats']        등반 통계 (프로필 통계 패널)
  * - ['users', 'search', q]        닉네임 검색 (무한)
  * - ['logs', 'user', id]          회원의 기록 (무한) — useClimbs 의 좋아요·작성 반영 대상에 포함된다
  */
 const userKey = (id: number) => ['users', id] as const
 const followersKey = (id: number) => ['users', id, 'followers'] as const
 const followingKey = (id: number) => ['users', id, 'following'] as const
+const statsKey = (id: number) => ['users', id, 'stats'] as const
 const searchKey = (q: string) => ['users', 'search', q] as const
 const userLogsKey = (id: number) => ['logs', 'user', id] as const
 
@@ -105,6 +108,15 @@ export function useSearchUsers(q: string) {
     queryFn: ({ pageParam }) => searchUsers(query, pageParam),
     enabled: query.length > 0,
     ...cursorPaging,
+  })
+}
+
+/** 회원 통계 — 본인/타인 구분은 서버가 한다 */
+export function useUserStats(id: number) {
+  return useQuery({
+    queryKey: statsKey(id),
+    queryFn: () => fetchUserStats(id),
+    enabled: Number.isFinite(id),
   })
 }
 
