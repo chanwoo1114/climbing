@@ -31,6 +31,10 @@ EMAIL_TYPES = frozenset(
         Notification.Type.RECRUITMENT_REJECTED,
         Notification.Type.CREW_APPROVED,
         Notification.Type.CREW_REJECTED,
+        Notification.Type.CREW_OWNER,
+        # 분석/리포트는 몇 분 걸려서 자리를 비운 사이 끝나는 경우가 많다
+        Notification.Type.ANALYSIS_DONE,
+        Notification.Type.REPORT_DONE,
     }
 )
 

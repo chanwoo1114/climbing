@@ -23,6 +23,11 @@ class Notification(BaseModel):
         CREW_APPROVED = "crew_approved", "크루 가입 승인"
         CREW_REJECTED = "crew_rejected", "크루 가입 거절"
         CREW_JOINED = "crew_joined", "크루 가입/신청 (운영진용)"
+        CREW_OWNER = "crew_owner", "크루장 위임"
+        ANALYSIS_DONE = "analysis_done", "자세 분석 완료"
+        ANALYSIS_FAILED = "analysis_failed", "자세 분석 실패"
+        REPORT_DONE = "report_done", "코칭 리포트 완료"
+        REPORT_FAILED = "report_failed", "코칭 리포트 실패"
 
     class TargetType(models.TextChoices):
         CLIMB_LOG = "climb_log", "등반 기록"

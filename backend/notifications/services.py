@@ -10,6 +10,9 @@
     notify_participation_status(participation)   community.set_participation_status
     notify_crew_member_status(member)            crews.set_member_status
     notify_crew_joined(member)                   crews.join_crew
+    notify_crew_owner_transferred(crew, actor)   crews.transfer_ownership
+    notify_analysis_status(analysis)             analysis.mark_done / mark_failed
+    notify_report_status(analysis)               analysis.coaching / mark_report_failed
 
 알림 실패가 본 동작(좋아요·댓글·가입…)을 깨뜨리면 안 되므로 notify() 는 자체 savepoint
 안에서 저장하고 어떤 예외도 밖으로 내보내지 않는다 (로그만). 본인이 본인에게 하는
@@ -263,6 +266,66 @@ def notify_crew_joined(member) -> list[Notification]:
         for user_id in manager_ids
     ]
     return [n for n in created if n is not None]
+
+
+def notify_crew_owner_transferred(crew, actor) -> Notification | None:
+    """크루장 위임 결과를 새 크루장에게."""
+    return notify(
+        recipient=crew.owner_id,
+        actor=actor,
+        type=Notification.Type.CREW_OWNER,
+        target_type=Notification.TargetType.CREW,
+        target_id=crew.id,
+        message=f"{actor.nickname}님이 {crew.name} 크루장을 회원님에게 위임했습니다",
+    )
+
+
+def notify_analysis_status(analysis) -> Notification | None:
+    """자세 분석 완료/실패를 기록 작성자에게. 이동 대상은 기록 상세(분석 패널)."""
+    from analysis.models import VideoAnalysis
+
+    if analysis.status == VideoAnalysis.Status.DONE:
+        type_, message = (
+            Notification.Type.ANALYSIS_DONE,
+            "영상 자세 분석이 완료되었습니다",
+        )
+    elif analysis.status == VideoAnalysis.Status.FAILED:
+        type_ = Notification.Type.ANALYSIS_FAILED
+        message = f"영상 자세 분석에 실패했습니다: {analysis.error_message}"
+    else:
+        return None
+    return notify(
+        recipient=analysis.climb_log.user_id,
+        actor=None,
+        type=type_,
+        target_type=Notification.TargetType.CLIMB_LOG,
+        target_id=analysis.climb_log_id,
+        message=message,
+    )
+
+
+def notify_report_status(analysis) -> Notification | None:
+    """AI 코칭 리포트 완료/실패를 기록 작성자에게."""
+    from analysis.models import VideoAnalysis
+
+    if analysis.report_status == VideoAnalysis.ReportStatus.DONE:
+        type_, message = (
+            Notification.Type.REPORT_DONE,
+            "AI 코칭 리포트가 준비되었습니다",
+        )
+    elif analysis.report_status == VideoAnalysis.ReportStatus.FAILED:
+        type_ = Notification.Type.REPORT_FAILED
+        message = f"AI 코칭 리포트 생성에 실패했습니다: {analysis.report_error}"
+    else:
+        return None
+    return notify(
+        recipient=analysis.climb_log.user_id,
+        actor=None,
+        type=type_,
+        target_type=Notification.TargetType.CLIMB_LOG,
+        target_id=analysis.climb_log_id,
+        message=message,
+    )
 
 
 # --- 조회 / 읽음 (REST) --------------------------------------------------------

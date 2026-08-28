@@ -16,6 +16,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from analysis.models import VideoAnalysis
+from notifications.services import notify_report_status
 
 logger = logging.getLogger(__name__)
 
@@ -231,4 +232,5 @@ def generate_report(analysis: VideoAnalysis) -> VideoAnalysis:
             "updated_at",
         ]
     )
+    notify_report_status(analysis)  # 완료 알림 (기록 작성자에게)
     return analysis

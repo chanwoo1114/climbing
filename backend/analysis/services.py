@@ -19,6 +19,7 @@ from analysis.exceptions import (
 )
 from analysis.models import VideoAnalysis
 from climbs.models import ClimbLog
+from notifications.services import notify_analysis_status, notify_report_status
 
 logger = logging.getLogger(__name__)
 
@@ -136,12 +137,14 @@ def mark_done(analysis: VideoAnalysis, keypoints: dict, metrics: dict):
             "updated_at",
         ]
     )
+    notify_analysis_status(analysis)
 
 
 def mark_failed(analysis: VideoAnalysis, message: str):
     analysis.status = VideoAnalysis.Status.FAILED
     analysis.error_message = message
     analysis.save(update_fields=["status", "error_message", "updated_at"])
+    notify_analysis_status(analysis)
 
 
 # --- AI 코칭 리포트 -----------------------------------------------------------
@@ -205,3 +208,4 @@ def mark_report_failed(analysis: VideoAnalysis, message: str):
     analysis.report_status = VideoAnalysis.ReportStatus.FAILED
     analysis.report_error = message
     analysis.save(update_fields=["report_status", "report_error", "updated_at"])
+    notify_report_status(analysis)
