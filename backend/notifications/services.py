@@ -21,16 +21,21 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 
-from notifications.models import MESSAGE_MAX_LENGTH, Notification
+from notifications.models import (
+    MESSAGE_MAX_LENGTH,
+    Notification,
+    NotificationSetting,
+    PushSubscription,
+)
 from notifications.tasks import deliver_notification
 
 logger = logging.getLogger(__name__)
 
 PREVIEW_LENGTH = 40
 
-# 같은 (받는 사람, 행위자, 종류, 대상) 알림을 한 줄로 유지하는 종류 — 좋아요 토글 반복이
-# 알림을 도배하지 않도록 기존 행을 갱신(created_at·is_read 리셋)한다.
-DEDUPE_TYPES = frozenset({Notification.Type.LIKE})
+# 같은 (받는 사람, 행위자, 종류, 대상) 알림을 한 줄로 유지하는 종류 — 좋아요 토글이나
+# 언팔로우→재팔로우 반복이 알림을 도배하지 않도록 기존 행을 갱신(created_at·is_read 리셋)한다.
+DEDUPE_TYPES = frozenset({Notification.Type.LIKE, Notification.Type.FOLLOW})
 
 
 def _pk(obj_or_id):
@@ -289,3 +294,63 @@ def mark_all_read(user) -> int:
     return Notification.objects.filter(recipient=user, is_read=False).update(
         is_read=True, read_at=now, updated_at=now
     )
+
+
+# --- 채널 설정 / 푸시 구독 (REST) ----------------------------------------------
+
+
+def get_or_create_setting(user) -> NotificationSetting:
+    """회원의 알림 설정. 없으면 기본값(둘 다 켜짐)으로 만든다."""
+    setting, _ = NotificationSetting.objects.get_or_create(user=user)
+    return setting
+
+
+def update_setting(user, **fields) -> NotificationSetting:
+    setting = get_or_create_setting(user)
+    changed = []
+    for name in ("push_enabled", "email_enabled"):
+        if name in fields and getattr(setting, name) != fields[name]:
+            setattr(setting, name, fields[name])
+            changed.append(name)
+    if changed:
+        setting.save(update_fields=changed + ["updated_at"])
+    return setting
+
+
+USER_AGENT_MAX_LENGTH = PushSubscription._meta.get_field("user_agent").max_length
+
+
+@transaction.atomic
+def subscribe_push(
+    user, *, endpoint: str, p256dh: str, auth: str, user_agent: str = ""
+) -> PushSubscription:
+    """endpoint 기준 upsert. 같은 브라우저를 다른 계정이 쓰면 구독을 요청자에게 넘긴다."""
+    user_agent = (user_agent or "")[:USER_AGENT_MAX_LENGTH]
+    subscription = (
+        PushSubscription.objects.select_for_update().filter(endpoint=endpoint).first()
+    )
+    if subscription is None:
+        return PushSubscription.objects.create(
+            user=user,
+            endpoint=endpoint,
+            p256dh=p256dh,
+            auth=auth,
+            user_agent=user_agent,
+        )
+    subscription.user = user
+    subscription.p256dh = p256dh
+    subscription.auth = auth
+    subscription.user_agent = user_agent
+    subscription.save(
+        update_fields=["user", "p256dh", "auth", "user_agent", "updated_at"]
+    )
+    return subscription
+
+
+def unsubscribe_push(user, *, endpoint: str) -> int:
+    """요청자 본인의 구독만 제거 (멱등). 죽은 endpoint 를 남길 이유가 없어 hard delete."""
+    deleted = 0
+    for subscription in PushSubscription.objects.filter(user=user, endpoint=endpoint):
+        subscription.hard_delete()
+        deleted += 1
+    return deleted

@@ -1,0 +1,20 @@
+{% extends "accounts/email/base.html" %}
+
+{% block content %}
+<p style="margin:0 0 6px;font-size:12px;line-height:18px;font-weight:600;letter-spacing:0.02em;color:#6f777d;">{{ type_label }}</p>
+<h1 style="margin:0 0 12px;font-size:22px;line-height:30px;font-weight:700;color:#23272a;">{{ nickname }}님, 새 알림이 있어요</h1>
+
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-top:8px;">
+  <tr>
+    <td style="background-color:#f3f5f4;border:1px solid #dde2df;border-radius:12px;padding:14px 16px;font-size:15px;line-height:24px;color:#23272a;">
+      {{ message }}
+    </td>
+  </tr>
+</table>
+
+{% include "accounts/email/_button.html" with label="자세히 보기" %}
+{% endblock %}
+
+{% block footer %}
+<p style="margin:0;">이 메일이 번거로우면 앱의 알림 설정에서 이메일 알림을 끌 수 있어요.</p>
+{% endblock %}

@@ -1,7 +1,12 @@
 """알림 전달 태스크 — 저장(services.notify) 후 on_commit 으로 큐에 들어간다.
 
-지금은 WebSocket(채널 레이어 그룹 ``user_{id}``) 으로만 밀어준다. 푸시·이메일 팬아웃은
-이 태스크에 덧붙인다. 테스트는 CELERY_TASK_ALWAYS_EAGER 라 즉시 실행된다.
+채널 세 개를 순서대로, 서로 독립적으로 시도한다 (하나가 실패해도 나머지는 간다):
+
+    1. WebSocket  채널 레이어 그룹 ``user_{id}`` 로 group_send (항상)
+    2. Web Push   notifications.push.send_push — VAPID 키가 있고 회원이 켜 둔 경우
+    3. 이메일     notifications.emails.send_notification_email — 중요 종류만, 인증된 주소만
+
+테스트는 CELERY_TASK_ALWAYS_EAGER 라 즉시 실행된다.
 """
 
 import logging
@@ -19,11 +24,13 @@ def user_group_name(user_id: int) -> str:
 
 @shared_task
 def deliver_notification(notification_id: int) -> None:
+    from notifications.emails import send_notification_email
     from notifications.models import Notification
+    from notifications.push import send_push
     from notifications.serializers import NotificationSerializer
 
     notification = (
-        Notification.objects.select_related("actor__profile")
+        Notification.objects.select_related("actor__profile", "recipient")
         .filter(pk=notification_id)
         .first()
     )
@@ -37,11 +44,31 @@ def deliver_notification(notification_id: int) -> None:
             {"type": "notification", "notification": payload},
         )
     except Exception:  # noqa: BLE001 — 전달은 best-effort, 저장은 이미 끝났다
+        logger.exception("notification websocket failed: id=%s", notification_id)
+    else:
+        logger.info(
+            "notification delivered: id=%s recipient=%s type=%s",
+            notification_id,
+            notification.recipient_id,
+            notification.type,
+        )
+
+    pushed = 0
+    try:
+        pushed = send_push(notification)
+    except Exception:  # noqa: BLE001 — send_push 는 예외를 안 내지만 방어적으로
         logger.exception("notification push failed: id=%s", notification_id)
-        return
-    logger.info(
-        "notification delivered: id=%s recipient=%s type=%s",
-        notification_id,
-        notification.recipient_id,
-        notification.type,
-    )
+
+    emailed = False
+    try:
+        emailed = send_notification_email(notification)
+    except Exception:  # noqa: BLE001
+        logger.exception("notification email failed: id=%s", notification_id)
+
+    if pushed or emailed:
+        logger.info(
+            "notification fan-out: id=%s push=%s email=%s",
+            notification_id,
+            pushed,
+            emailed,
+        )

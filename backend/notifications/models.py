@@ -72,5 +72,80 @@ class Notification(BaseModel):
         return f"[{self.type}] → {self.recipient_id}: {self.message}"
 
 
+class NotificationSetting(BaseModel):
+    """회원별 알림 채널 스위치. 행이 없으면 둘 다 켜진 것으로 본다 (services.get_or_create_setting).
+
+    인앱(WebSocket) 알림은 항상 가고, 여기서는 푸시·이메일 팬아웃만 끈다.
+    """
+
+    user = models.OneToOneField(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="notification_setting",
+        db_comment="회원 FK (1:1)",
+    )
+    push_enabled = models.BooleanField(
+        default=True, db_comment="Web Push 팬아웃 허용 여부"
+    )
+    email_enabled = models.BooleanField(
+        default=True, db_comment="이메일 팬아웃 허용 여부 (중요 알림만 발송)"
+    )
+
+    class Meta:
+        db_table_comment = "회원별 알림 채널 설정 — 푸시/이메일 on·off"
+
+    def __str__(self):
+        return (
+            f"setting(user={self.user_id}, push={self.push_enabled}, "
+            f"email={self.email_enabled})"
+        )
+
+
+class PushSubscription(BaseModel):
+    """브라우저 Web Push 구독 (PushSubscription.toJSON() 의 endpoint + keys).
+
+    같은 브라우저가 다른 계정으로 다시 구독하면 endpoint 가 같으므로 살아 있는 행 중
+    endpoint 로 upsert 한다(services.subscribe_push). 해지·만료(404/410)는 soft delete 가
+    아니라 hard_delete — 죽은 endpoint 를 남겨 둘 이유가 없고, 조건부 unique 는
+    is_deleted=False 만 보므로 어느 쪽이든 재구독은 가능하다.
+    """
+
+    user = models.ForeignKey(
+        "accounts.User",
+        on_delete=models.CASCADE,
+        related_name="push_subscriptions",
+        db_comment="구독한 회원 FK",
+    )
+    endpoint = models.URLField(
+        max_length=500, db_comment="푸시 서비스 endpoint URL (브라우저별 고유)"
+    )
+    p256dh = models.CharField(
+        max_length=255, db_comment="클라이언트 공개키 (keys.p256dh, base64url)"
+    )
+    auth = models.CharField(
+        max_length=255, db_comment="인증 비밀 (keys.auth, base64url)"
+    )
+    user_agent = models.CharField(
+        max_length=255, blank=True, db_comment="구독 당시 User-Agent (기기 식별용)"
+    )
+    last_used_at = models.DateTimeField(
+        null=True, blank=True, db_comment="마지막으로 푸시 발송에 성공한 시각"
+    )
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["endpoint"],
+                condition=models.Q(is_deleted=False),
+                name="uniq_push_subscription_endpoint",
+            )
+        ]
+        indexes = [models.Index(fields=["user"])]
+        db_table_comment = "Web Push 구독 — 회원/endpoint/키/UA/마지막 사용"
+
+    def __str__(self):
+        return f"push(user={self.user_id}, endpoint={self.endpoint[:40]}…)"
+
+
 # drf-spectacular ENUM_NAME_OVERRIDES 용 (settings 에서 문자열 경로로 참조)
 NOTIFICATION_TYPE_CHOICES = Notification.Type.choices

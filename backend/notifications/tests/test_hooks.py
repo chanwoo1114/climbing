@@ -151,12 +151,21 @@ class FollowHookTests(APITestCase):
         self.assertEqual(items[0].message, "alpha님이 회원님을 팔로우하기 시작했습니다")
         self.assertEqual(notifications_for(self.me), [])
 
-    def test_refollow_after_unfollow_notifies_again(self):
+    def test_refollow_after_unfollow_refreshes_existing_notification(self):
+        """언팔→재팔 반복은 알림을 도배하지 않고 기존 한 줄을 갱신(읽지 않음으로)한다."""
         follow_user(follower=self.me, target_id=self.target.id)
+        first = notifications_for(self.target)[0]
+        first.is_read = True
+        first.save(update_fields=["is_read"])
+
         self.client.force_authenticate(self.me)
         self.client.delete(reverse("v1:social:follow", args=[self.target.id]))
         follow_user(follower=self.me, target_id=self.target.id)
-        self.assertEqual(len(notifications_for(self.target)), 2)
+
+        items = notifications_for(self.target)
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].id, first.id)
+        self.assertFalse(items[0].is_read)
 
 
 @override_settings(**IN_MEMORY_CHANNELS)

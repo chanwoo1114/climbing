@@ -1,0 +1,13 @@
+{% autoescape off %}{{ nickname }}님, 새 알림이 있어요.
+
+[{{ type_label }}]
+{{ message }}
+
+아래 링크에서 자세히 확인할 수 있습니다.
+
+{{ link }}
+
+이 메일이 번거로우면 앱의 알림 설정에서 이메일 알림을 끌 수 있어요.
+
+— Climbing (발신 전용)
+{% endautoescape %}
