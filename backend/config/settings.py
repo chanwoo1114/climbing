@@ -256,6 +256,25 @@ S3_PRESIGNED_EXPIRE_SECONDS = env.int("S3_PRESIGNED_EXPIRE_SECONDS", default=300
 ANALYSIS_MAX_VIDEO_SECONDS = env.int("ANALYSIS_MAX_VIDEO_SECONDS", default=120)
 ANALYSIS_SAMPLE_FPS = env.int("ANALYSIS_SAMPLE_FPS", default=10)
 
+# --- 알림 팬아웃 (notifications) ---------------------------------------------
+# Web Push (VAPID). 키가 비어 있으면 푸시 팬아웃은 조용히 건너뛰고 구독 등록 API 는
+# 503 push_not_configured 를 돌려준다. 키 생성은 `dc exec web vapid --gen` (pywebpush 동봉)
+# — 자세한 절차는 .env.example 참고.
+WEBPUSH_VAPID_PUBLIC_KEY = env("WEBPUSH_VAPID_PUBLIC_KEY", default="")
+WEBPUSH_VAPID_PRIVATE_KEY = env("WEBPUSH_VAPID_PRIVATE_KEY", default="")
+# VAPID claims 의 sub (mailto:). 푸시 서비스가 문제 발생 시 연락할 주소.
+WEBPUSH_VAPID_CLAIMS_EMAIL = env("WEBPUSH_VAPID_CLAIMS_EMAIL", default="")
+WEBPUSH_TTL_SECONDS = env.int("WEBPUSH_TTL_SECONDS", default=86400)
+# 이메일 팬아웃 전체 스위치 (사용자별 설정과 AND). 발송 자체는 EMAIL_BACKEND 설정을 따른다.
+NOTIFICATION_EMAIL_ENABLED = env.bool("NOTIFICATION_EMAIL_ENABLED", default=True)
+
+# --- AI 코칭 리포트 (analysis.coaching) ---------------------------------------
+# 비어 있으면 리포트 생성 API 가 503 coaching_not_configured 를 돌려준다.
+ANTHROPIC_API_KEY = env("ANTHROPIC_API_KEY", default="")
+COACHING_MODEL = env("COACHING_MODEL", default="claude-opus-5")
+COACHING_MAX_TOKENS = env.int("COACHING_MAX_TOKENS", default=4096)
+COACHING_EFFORT = env("COACHING_EFFORT", default="medium")
+
 # --- 테스트 전용 오버라이드 --------------------------------------------------
 if "test" in sys.argv:
     # throttle 카운터가 테스트 간에 누적되지 않게 (throttle 테스트는 LocMem 으로 override).

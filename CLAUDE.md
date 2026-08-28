@@ -12,11 +12,20 @@ front/     React 19 + TS + Vite    (SPA, React Router v7 라이브러리 모드 
 docs/      개발정의.md (개발 정의서 v3 — 마일스톤/모델/API 초안)
 ```
 
-앱별 핵심: accounts(JWT·이메일 인증·카카오 로그인 `accounts/social/`·공개 프로필·검색),
-gyms(지도 bbox 검색·`points/` 클러스터용·리뷰), climbs(기록·좋아요·댓글·피드·`users/{id}/logs`),
-social(팔로우), community(게시판·모집·참여 — 마감 시 chat 그룹방 자동 생성), crews(크루·멤버·크루 채팅방·크루 피드),
-chat(REST + WebSocket `ws/chat/{room}/`, JWT 는 `?token=`), analysis(Celery + MediaPipe 자세 분석),
-notifications(훅 기반 알림 + `ws/notifications/`). 파일 업로드는 `common` 의 presigned PUT.
+앱별 핵심: accounts(JWT·이메일 인증·카카오 로그인 `accounts/social/`·공개 프로필·검색·
+비밀번호 변경 `auth/password/change/`·탈퇴 `DELETE users/me/`),
+gyms(지도 bbox 검색·`points/` 클러스터용·리뷰·암장 관리자 `GymManager` — `managed/`, PATCH `{id}/`,
+난이도/이미지/가격/편의시설/관리자 CRUD, 권한은 `gyms/services.is_gym_manager` + is_staff),
+climbs(기록·좋아요·댓글·피드·`users/{id}/logs`·`users/{id}/stats/` 통계 `climbs/stats.py`·
+베타 영상 `ClimbBeta` — `gyms/{id}/betas/`·`betas/{id}/`, 서비스는 `climbs/beta_services.py`),
+social(팔로우), community(게시판·모집·참여 — 마감 시 chat 그룹방 자동 생성),
+crews(크루·멤버·크루 채팅방·크루 피드·`{id}/stats/`·`ranking/` 월간 통계/랭킹 `crews/stats.py`),
+chat(REST + WebSocket `ws/chat/{room}/`, JWT 는 `?token=`),
+analysis(Celery + MediaPipe 자세 분석 + AI 코칭 리포트 `POST analyses/{id}/report/` — `analysis/coaching.py`,
+Claude API `claude-opus-5`, ANTHROPIC_API_KEY 없으면 503),
+notifications(훅 기반 알림 + `ws/notifications/` + 팬아웃: Web Push `notifications/push.py`(VAPID 키 없으면 건너뜀)·
+이메일 `notifications/emails.py`(모집/크루 결과만)·사용자 설정 `settings/`·구독 `push-subscriptions/`).
+파일 업로드는 `common` 의 presigned PUT (kind: profile_image/post_image/climb_video/beta_video/beta_thumbnail).
 
 공용 코드는 `backend/common/` (BaseModel, 소프트삭제 매니저, 응답 래퍼 렌더러,
 커서 페이지네이션, 예외 핸들러). 도메인 앱은 이걸 상속/재사용한다.
@@ -162,8 +171,10 @@ LAN IP 나 공인 IP 로 접속하면 WebSocket 이 `AllowedHostsOriginValidator
 
 ## 작업 흐름
 
-- 마일스톤 순서는 `docs/개발정의.md`의 M1→M7. 백엔드는 M1~M7 전부 구현됨(2026-08-27). 남은 큰 항목은
-  배포(prod compose 없음), 통계/랭킹(M8), 푸시/이메일 알림 fan-out(placeholder)
+- 마일스톤 순서는 `docs/개발정의.md`의 M1→M7. 백엔드는 M1~M7 전부 구현됨(2026-08-27),
+  M8 통계/랭킹·비밀번호 변경·탈퇴·알림 팬아웃·코칭 리포트·ClimbBeta·암장 관리자는 2026-08-28 구현.
+  남은 큰 항목은 배포(prod compose 없음 — 사용자가 보류). `requirements/base.txt` 에 pywebpush·anthropic 이
+  추가됐으니 다음 `dc up -d --build` 로 이미지를 재빌드할 것 (지금은 컨테이너에 pip 로만 설치됨)
 - 에이전트 병렬 개발 시: 앱(디렉토리) 단위로 범위를 나누고, 공유 파일(`routes.tsx`, `RootLayout.tsx`,
   `accounts/serializers.py`)은 additive Edit 만. 새 파일은 Write 한 번에 (Vite 가 빈 모듈을 캐시함 → `touch` 로 복구)
 - 마이그레이션 파일은 임의 수정 금지, 모델 변경 시 새로 생성

@@ -20,3 +20,9 @@ gunicorn==23.0.0
 
 # 영상 분석 지표 계산(analysis.pipeline.compute_metrics) — web 에서도 단위 테스트한다
 numpy==1.26.4
+
+# 알림 푸시 팬아웃 (Web Push / VAPID) — notifications.push
+pywebpush==2.4.0
+
+# AI 코칭 리포트 (analysis.coaching) — Claude API
+anthropic==1.2.0
